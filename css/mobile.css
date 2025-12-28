@@ -1,0 +1,293 @@
+/* ==================== MOBILE & RESPONSIVE STYLES ==================== */
+
+/* Tablet and below */
+@media (max-width: 900px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-lg);
+    }
+
+    .panel {
+        padding: var(--spacing-lg);
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+    body {
+        padding: var(--spacing-md);
+    }
+
+    h1 {
+        font-size: 1.25rem;
+        letter-spacing: 1px;
+    }
+
+    h2 {
+        font-size: 1rem;
+    }
+
+    .card-text {
+        font-size: 0.85rem;
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .tab-nav {
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .tab-button {
+        padding: 10px var(--spacing-lg);
+        font-size: 0.9rem;
+        letter-spacing: 0.5px;
+    }
+
+    .panel {
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    /* Make inputs more touch-friendly */
+    .input-group input,
+    .type-input input,
+    .import-btn {
+        min-height: 44px; /* iOS recommended touch target */
+    }
+
+    .type-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-sm);
+    }
+
+    /* Larger slider thumb for mobile */
+    .x-slider-row input[type="range"]::-webkit-slider-thumb {
+        width: 24px;
+        height: 24px;
+    }
+
+    .x-slider-row input[type="range"]::-moz-range-thumb {
+        width: 24px;
+        height: 24px;
+    }
+
+    /* Stack import row on very small screens */
+    .import-row {
+        flex-direction: column;
+    }
+
+    .import-row input,
+    .import-btn {
+        width: 100%;
+    }
+
+    /* Adjust chart containers for mobile */
+    .chart-container {
+        height: 240px;
+    }
+
+    .chart-legend {
+        gap: var(--spacing-md);
+        font-size: 0.8rem;
+    }
+
+    .legend-item {
+        gap: var(--spacing-xs);
+    }
+
+    /* Table scrolling for mobile */
+    .comparison-table {
+        font-size: 0.8rem;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+        padding: var(--spacing-sm);
+        white-space: nowrap;
+    }
+}
+
+/* Small mobile */
+@media (max-width: 375px) {
+    .tab-button {
+        font-size: 0.8rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .type-input {
+        padding: 6px var(--spacing-sm);
+    }
+
+    .type-input label {
+        font-size: 0.8rem;
+    }
+
+    .type-input input {
+        width: 45px;
+        font-size: 0.85rem;
+    }
+
+    .comparison-table {
+        font-size: 0.75rem;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+        padding: 6px;
+    }
+}
+
+/* Landscape mobile - optimize horizontal space */
+@media (max-width: 900px) and (orientation: landscape) {
+    body {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    h1 {
+        font-size: 1.25rem;
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .card-text {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .tab-nav {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .panel {
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .chart-container {
+        height: 200px;
+    }
+
+    .main-grid {
+        gap: var(--spacing-md);
+    }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}
+
+/* Dark mode support (respects system preference) */
+@media (prefers-color-scheme: dark) {
+    /* Already dark by default, but can adjust if needed */
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+
+    .tab-nav,
+    .import-section {
+        display: none;
+    }
+
+    .panel {
+        break-inside: avoid;
+        border: 1px solid #ccc;
+        box-shadow: none;
+    }
+
+    .chart-container {
+        page-break-inside: avoid;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Increase touch targets */
+    .tab-button,
+    .import-btn,
+    input[type="number"],
+    input[type="text"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Remove hover effects on touch devices */
+    .tab-button:hover,
+    .import-btn:hover {
+        transform: none;
+    }
+
+    /* Better touch feedback */
+    .tab-button:active,
+    .import-btn:active {
+        opacity: 0.8;
+    }
+
+    /* Prevent text selection on UI elements */
+    .tab-button,
+    .import-btn,
+    .panel h2,
+    .legend-item {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+}
+
+/* iPad Pro and larger tablets */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .main-grid {
+        grid-template-columns: 320px 1fr;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 0 var(--spacing-md);
+    }
+}
+
+/* Safe area insets for modern mobile devices (notch support) */
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(var(--spacing-xl), env(safe-area-inset-left));
+        padding-right: max(var(--spacing-xl), env(safe-area-inset-right));
+        padding-top: max(var(--spacing-xl), env(safe-area-inset-top));
+        padding-bottom: max(var(--spacing-xl), env(safe-area-inset-bottom));
+    }
+}
+
+/* Optimize for foldable devices */
+@media (min-width: 600px) and (max-width: 900px) and (min-height: 600px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Stack panels vertically on narrow but tall screens */
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
