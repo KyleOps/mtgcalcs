@@ -1,0 +1,2198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Probability Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Crimson Text', Georgia, serif;
+            min-height: 100vh;
+            color: #c4b8b8;
+            padding: 20px;
+            transition: background 0.4s ease;
+        }
+
+        /* Theme backgrounds */
+        body.theme-portent {
+            background: linear-gradient(135deg, #0a0a12 0%, #1a1a2e 40%, #120a0a 100%);
+        }
+
+        body.theme-surge {
+            background: linear-gradient(135deg, #0a120a 0%, #1a2e1a 40%, #0a120a 100%);
+        }
+
+        body.theme-wave {
+            background: linear-gradient(135deg, #0a0a12 0%, #1a2a2e 40%, #0a1012 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            border: 2px solid;
+            border-radius: 8px;
+            font-family: 'Cinzel', serif;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(0, 0, 0, 0.4);
+            letter-spacing: 1px;
+        }
+
+        .tab-button.portent {
+            border-color: rgba(168, 85, 247, 0.5);
+            color: #a855f7;
+        }
+
+        .tab-button.portent:hover,
+        .tab-button.portent.active {
+            background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+            color: #e0d0d0;
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .tab-button.surge {
+            border-color: rgba(34, 197, 94, 0.5);
+            color: #22c55e;
+        }
+
+        .tab-button.surge:hover,
+        .tab-button.surge.active {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            color: #e0d0d0;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .tab-button.wave {
+            border-color: rgba(14, 165, 233, 0.5);
+            color: #0ea5e9;
+        }
+
+        .tab-button.wave:hover,
+        .tab-button.wave.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0c4a6e 100%);
+            color: #e0d0d0;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+            transform: translateY(-2px);
+        }
+
+        h1 {
+            font-family: 'Cinzel', serif;
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 2rem;
+            letter-spacing: 2px;
+            transition: all 0.4s ease;
+        }
+
+        .theme-portent h1 {
+            color: #a855f7;
+            text-shadow: 0 2px 10px rgba(168, 85, 247, 0.4), 0 0 30px rgba(139, 0, 0, 0.3);
+        }
+
+        .theme-surge h1 {
+            color: #22c55e;
+            text-shadow: 0 2px 10px rgba(34, 197, 94, 0.4), 0 0 30px rgba(0, 139, 0, 0.3);
+        }
+
+        .theme-wave h1 {
+            color: #0ea5e9;
+            text-shadow: 0 2px 10px rgba(14, 165, 233, 0.4), 0 0 30px rgba(0, 100, 139, 0.3);
+        }
+
+        h2 {
+            font-family: 'Cinzel', serif;
+        }
+
+        .card-text {
+            text-align: center;
+            font-style: italic;
+            color: #8a7a7a;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: linear-gradient(145deg, rgba(20, 15, 25, 0.9) 0%, rgba(15, 10, 15, 0.95) 100%);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            transition: border 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .theme-portent .panel {
+            border: 1px solid rgba(139, 0, 0, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(168, 85, 247, 0.1);
+        }
+
+        .theme-surge .panel {
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(34, 197, 94, 0.1);
+        }
+
+        .theme-wave .panel {
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(14, 165, 233, 0.1);
+        }
+
+        .panel h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            letter-spacing: 1px;
+            transition: color 0.4s ease, border-color 0.4s ease;
+        }
+
+        .theme-portent .panel h2 {
+            color: #a855f7;
+            border-bottom: 1px solid rgba(139, 0, 0, 0.4);
+        }
+
+        .theme-surge .panel h2 {
+            color: #22c55e;
+            border-bottom: 1px solid rgba(34, 197, 94, 0.4);
+        }
+
+        .theme-wave .panel h2 {
+            color: #0ea5e9;
+            border-bottom: 1px solid rgba(14, 165, 233, 0.4);
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+            color: #9a8a8a;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #e0d0d0;
+            font-size: 1rem;
+            font-family: 'Crimson Text', Georgia, serif;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .theme-portent .input-group input {
+            border: 1px solid rgba(139, 0, 0, 0.4);
+        }
+
+        .theme-surge .input-group input {
+            border: 1px solid rgba(34, 197, 94, 0.4);
+        }
+
+        .theme-wave .input-group input {
+            border: 1px solid rgba(14, 165, 233, 0.4);
+        }
+
+        .input-group input:focus {
+            outline: none;
+        }
+
+        .theme-portent .input-group input:focus {
+            border-color: #a855f7;
+            box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+        }
+
+        .theme-surge .input-group input:focus {
+            border-color: #22c55e;
+            box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+        }
+
+        .theme-wave .input-group input:focus {
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+        }
+
+        .type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .type-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+
+        .theme-portent .type-input {
+            border: 1px solid rgba(139, 0, 0, 0.2);
+        }
+
+        .theme-surge .type-input {
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .theme-wave .type-input {
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+
+        .type-input label {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #a09090;
+        }
+
+        .type-input input {
+            width: 50px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #e0d0d0;
+            font-size: 0.9rem;
+            text-align: center;
+            font-family: 'Crimson Text', Georgia, serif;
+        }
+
+        .theme-portent .type-input input {
+            border: 1px solid rgba(139, 0, 0, 0.3);
+        }
+
+        .theme-surge .type-input input {
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .theme-wave .type-input input {
+            border: 1px solid rgba(14, 165, 233, 0.3);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+            margin-bottom: 20px;
+        }
+
+        .charts-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .insight-box {
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 16px;
+            transition: background 0.4s ease, border 0.4s ease;
+        }
+
+        .theme-portent .insight-box {
+            background: rgba(139, 0, 0, 0.1);
+            border: 1px solid rgba(139, 0, 0, 0.3);
+        }
+
+        .theme-surge .insight-box {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .theme-wave .insight-box {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+        }
+
+        .insight-box h3 {
+            font-family: 'Cinzel', serif;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            transition: color 0.4s ease;
+        }
+
+        .theme-portent .insight-box h3 {
+            color: #dc2626;
+        }
+
+        .theme-surge .insight-box h3 {
+            color: #16a34a;
+        }
+
+        .theme-wave .insight-box h3 {
+            color: #0284c7;
+        }
+
+        .insight-box p {
+            font-size: 0.9rem;
+            color: #a09090;
+            line-height: 1.5;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 0.9rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 8px 12px;
+            text-align: center;
+        }
+
+        .theme-portent .comparison-table th,
+        .theme-portent .comparison-table td {
+            border: 1px solid rgba(139, 0, 0, 0.2);
+        }
+
+        .theme-surge .comparison-table th,
+        .theme-surge .comparison-table td {
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .theme-wave .comparison-table th,
+        .theme-wave .comparison-table td {
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+
+        .comparison-table th {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: background 0.4s ease, color 0.4s ease;
+        }
+
+        .theme-portent .comparison-table th {
+            background: rgba(139, 0, 0, 0.2);
+            color: #a855f7;
+        }
+
+        .theme-surge .comparison-table th {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .theme-wave .comparison-table th {
+            background: rgba(14, 165, 233, 0.2);
+            color: #0ea5e9;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .comparison-table .current {
+            font-weight: 600;
+            transition: background 0.4s ease;
+        }
+
+        .theme-portent .comparison-table .current {
+            background: rgba(168, 85, 247, 0.15);
+        }
+
+        .theme-surge .comparison-table .current {
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .theme-wave .comparison-table .current {
+            background: rgba(14, 165, 233, 0.15);
+        }
+
+        .marginal-positive {
+            transition: color 0.4s ease;
+        }
+
+        .theme-portent .marginal-positive {
+            color: #c084fc;
+        }
+
+        .theme-surge .marginal-positive {
+            color: #4ade80;
+        }
+
+        .theme-wave .marginal-positive {
+            color: #38bdf8;
+        }
+
+        .marginal-negative {
+            color: #dc2626;
+        }
+
+        /* Import Styles */
+        .import-section {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            transition: border-color 0.4s ease;
+        }
+
+        .theme-portent .import-section {
+            border-bottom: 1px solid rgba(139, 0, 0, 0.3);
+        }
+
+        .theme-surge .import-section {
+            border-bottom: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .theme-wave .import-section {
+            border-bottom: 1px solid rgba(14, 165, 233, 0.3);
+        }
+
+        .import-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .import-row input {
+            flex: 1;
+        }
+
+        .import-btn {
+            padding: 10px 16px;
+            border-radius: 6px;
+            color: #e0d0d0;
+            font-weight: 600;
+            font-family: 'Cinzel', serif;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+        }
+
+        .theme-portent .import-btn {
+            background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+            border: 1px solid rgba(139, 0, 0, 0.5);
+        }
+
+        .theme-portent .import-btn:hover {
+            background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+        }
+
+        .theme-surge .import-btn {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            border: 1px solid rgba(34, 197, 94, 0.5);
+        }
+
+        .theme-surge .import-btn:hover {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+        }
+
+        .theme-wave .import-btn {
+            background: linear-gradient(135deg, #0284c7 0%, #0c4a6e 100%);
+            border: 1px solid rgba(14, 165, 233, 0.5);
+        }
+
+        .theme-wave .import-btn:hover {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+        }
+
+        .import-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .import-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .import-status {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            min-height: 20px;
+        }
+
+        .import-status.success {
+            transition: color 0.4s ease;
+        }
+
+        .theme-portent .import-status.success {
+            color: #c084fc;
+        }
+
+        .theme-surge .import-status.success {
+            color: #4ade80;
+        }
+
+        .theme-wave .import-status.success {
+            color: #38bdf8;
+        }
+
+        .import-status.error {
+            color: #dc2626;
+        }
+
+        .import-status.loading {
+            transition: color 0.4s ease;
+        }
+
+        .theme-portent .import-status.loading {
+            color: #a855f7;
+        }
+
+        .theme-surge .import-status.loading {
+            color: #22c55e;
+        }
+
+        .theme-wave .import-status.loading {
+            color: #0ea5e9;
+        }
+
+        .deck-name {
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            transition: background 0.4s ease, border 0.4s ease, color 0.4s ease;
+        }
+
+        .theme-portent .deck-name {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            color: #c084fc;
+        }
+
+        .theme-surge .deck-name {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #4ade80;
+        }
+
+        .theme-wave .deck-name {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            color: #38bdf8;
+        }
+
+        .deck-name .label {
+            color: #8a7a7a;
+            font-size: 0.8rem;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .cors-note {
+            font-size: 0.8rem;
+            color: #6a5a5a;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+
+        .cors-note code {
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 0.75rem;
+            color: #a09090;
+            transition: background 0.4s ease;
+        }
+
+        .theme-portent .cors-note code {
+            background: rgba(139, 0, 0, 0.2);
+        }
+
+        .theme-surge .cors-note code {
+            background: rgba(34, 197, 94, 0.2);
+        }
+
+        .theme-wave .cors-note code {
+            background: rgba(14, 165, 233, 0.2);
+        }
+
+        .deck-total {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            text-align: center;
+            transition: all 0.4s ease;
+        }
+
+        .theme-portent .deck-total {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+        }
+
+        .theme-surge .deck-total {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .theme-wave .deck-total {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            color: #0ea5e9;
+        }
+
+        .deck-total span {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .x-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .x-slider-row input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            outline: none;
+            transition: background 0.4s ease;
+        }
+
+        .theme-portent .x-slider-row input[type="range"] {
+            background: rgba(139, 0, 0, 0.3);
+        }
+
+        .theme-surge .x-slider-row input[type="range"] {
+            background: rgba(34, 197, 94, 0.3);
+        }
+
+        .theme-wave .x-slider-row input[type="range"] {
+            background: rgba(14, 165, 233, 0.3);
+        }
+
+        .x-slider-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+            transition: transform 0.1s, background 0.4s ease;
+        }
+
+        .theme-portent .x-slider-row input[type="range"]::-webkit-slider-thumb {
+            background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+        }
+
+        .theme-surge .x-slider-row input[type="range"]::-webkit-slider-thumb {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        }
+
+        .theme-wave .x-slider-row input[type="range"]::-webkit-slider-thumb {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        }
+
+        .x-slider-row input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        .x-slider-row input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+            transition: background 0.4s ease;
+        }
+
+        .theme-portent .x-slider-row input[type="range"]::-moz-range-thumb {
+            background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+        }
+
+        .theme-surge .x-slider-row input[type="range"]::-moz-range-thumb {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        }
+
+        .theme-wave .x-slider-row input[type="range"]::-moz-range-thumb {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        }
+
+        .x-number {
+            width: 60px !important;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 12px;
+            font-size: 0.9rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #a09090;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="theme-portent">
+    <div class="container">
+        <div class="tab-nav">
+            <button class="tab-button portent active" onclick="switchTab('portent')">⚡ Portent of Calamity</button>
+            <button class="tab-button surge" onclick="switchTab('surge')">🌿 Primal Surge</button>
+            <button class="tab-button wave" onclick="switchTab('wave')">🌊 Genesis Wave</button>
+        </div>
+
+        <!-- PORTENT TAB -->
+        <div id="portent-tab" class="tab-content active">
+            <h1>⚡ Portent of Calamity Calculator</h1>
+            <p class="card-text">"A 9 mana draw 3, nice!"</p>
+
+            <div class="main-grid">
+                <div class="left-column">
+                    <div class="panel">
+                        <h2>📚 Deck Configuration</h2>
+
+                        <div class="import-section">
+                            <div class="input-group">
+                                <label>Import from Moxfield</label>
+                                <div class="import-row">
+                                    <input type="text" id="portent-moxfieldUrl" placeholder="https://moxfield.com/decks/...">
+                                    <button class="import-btn" id="portent-importBtn" onclick="importFromMoxfield('portent')">Import</button>
+                                </div>
+                                <div class="import-status" id="portent-importStatus"></div>
+                                <div class="deck-name" id="portent-deckInfo" style="display: none;">
+                                    <span class="label">Imported deck:</span>
+                                    <span id="portent-deckName"></span>
+                                </div>
+                                <p class="cors-note">
+                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>X value (cards to reveal)</label>
+                            <div class="x-slider-row">
+                                <input type="range" id="portent-xSlider" value="5" min="1" max="20" step="1">
+                                <input type="number" id="portent-xValue" value="5" min="1" max="50" class="x-number">
+                            </div>
+                        </div>
+
+                        <div class="input-group" style="margin-top: 16px;">
+                            <label style="margin-bottom: 8px;">Cards by type in library</label>
+                            <div class="type-grid">
+                                <div class="type-input">
+                                    <label>Creature</label>
+                                    <input type="number" id="portent-creatures" value="25" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Instant</label>
+                                    <input type="number" id="portent-instants" value="8" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Sorcery</label>
+                                    <input type="number" id="portent-sorceries" value="6" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Artifact</label>
+                                    <input type="number" id="portent-artifacts" value="4" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Enchant</label>
+                                    <input type="number" id="portent-enchantments" value="3" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Planeswalker</label>
+                                    <input type="number" id="portent-planeswalkers" value="2" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Land</label>
+                                    <input type="number" id="portent-lands" value="32" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Battle</label>
+                                    <input type="number" id="portent-battles" value="0" min="0">
+                                </div>
+                            </div>
+                            <div class="deck-total">
+                                Total cards in library: <span id="portent-deckSize">80</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="right-column">
+                    <div class="panel">
+                        <h2>📈 Probability & Expected Cards vs X Value</h2>
+                        <div class="chart-container" style="height: 320px;">
+                            <canvas id="portent-combinedChart"></canvas>
+                        </div>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> P(Free Spell) %</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> Expected Cards to Hand</span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h2>🔍 X Value Comparison</h2>
+                        <table class="comparison-table" id="portent-comparisonTable">
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRIMAL SURGE TAB -->
+        <div id="surge-tab" class="tab-content">
+            <h1>🌿 Primal Surge Calculator</h1>
+            <p class="card-text">"So do you win here or...?"</p>
+
+            <div class="main-grid">
+                <div class="left-column">
+                    <div class="panel">
+                        <h2>📚 Deck Configuration</h2>
+
+                        <div class="import-section">
+                            <div class="input-group">
+                                <label>Import from Moxfield</label>
+                                <div class="import-row">
+                                    <input type="text" id="surge-moxfieldUrl" placeholder="https://moxfield.com/decks/...">
+                                    <button class="import-btn" id="surge-importBtn" onclick="importFromMoxfield('surge')">Import</button>
+                                </div>
+                                <div class="import-status" id="surge-importStatus"></div>
+                                <div class="deck-name" id="surge-deckInfo" style="display: none;">
+                                    <span class="label">Imported deck:</span>
+                                    <span id="surge-deckName"></span>
+                                </div>
+                                <p class="cors-note">
+                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="input-group" style="margin-top: 16px;">
+                            <label style="margin-bottom: 8px;">Cards by type in library</label>
+                            <div class="type-grid">
+                                <div class="type-input">
+                                    <label>Creature</label>
+                                    <input type="number" id="surge-creatures" value="40" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Instant</label>
+                                    <input type="number" id="surge-instants" value="1" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Sorcery</label>
+                                    <input type="number" id="surge-sorceries" value="0" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Artifact</label>
+                                    <input type="number" id="surge-artifacts" value="8" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Enchant</label>
+                                    <input type="number" id="surge-enchantments" value="6" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Planeswalker</label>
+                                    <input type="number" id="surge-planeswalkers" value="2" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Land</label>
+                                    <input type="number" id="surge-lands" value="32" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Battle</label>
+                                    <input type="number" id="surge-battles" value="0" min="0">
+                                </div>
+                            </div>
+                            <div class="deck-total">
+                                Total cards in library: <span id="surge-deckSize">89</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="right-column">
+                    <div class="panel">
+                        <h2>📈 Expected Permanents & Deck Percentage</h2>
+                        <div class="chart-container" style="height: 320px;">
+                            <canvas id="surge-chart"></canvas>
+                        </div>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-color" style="background: #4ade80;"></span> Expected Permanents</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> % of Deck Played</span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h2>🔍 Simulation Results</h2>
+                        <table class="comparison-table" id="surge-statsTable">
+                        </table>
+                    </div>
+
+                    <div class="panel" id="surge-comparison-panel" style="display: none;">
+                        <h2>⚖️ Primal Surge vs Genesis Wave</h2>
+                        <div class="insight-box" id="surge-comparison-insight">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GENESIS WAVE TAB -->
+        <div id="wave-tab" class="tab-content">
+            <h1>🌊 Genesis Wave Calculator</h1>
+            <p class="card-text">"You may put any number of permanent cards with mana value X or less from among them onto the battlefield"</p>
+
+            <div class="main-grid">
+                <div class="left-column">
+                    <div class="panel">
+                        <h2>📚 Deck Configuration</h2>
+
+                        <div class="import-section">
+                            <div class="input-group">
+                                <label>Import from Moxfield</label>
+                                <div class="import-row">
+                                    <input type="text" id="wave-moxfieldUrl" placeholder="https://moxfield.com/decks/...">
+                                    <button class="import-btn" id="wave-importBtn" onclick="importFromMoxfield('wave')">Import</button>
+                                </div>
+                                <div class="import-status" id="wave-importStatus"></div>
+                                <div class="deck-name" id="wave-deckInfo" style="display: none;">
+                                    <span class="label">Imported deck:</span>
+                                    <span id="wave-deckName"></span>
+                                </div>
+                                <p class="cors-note">
+                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>X value (cards to reveal)</label>
+                            <div class="x-slider-row">
+                                <input type="range" id="wave-xSlider" value="10" min="1" max="30" step="1">
+                                <input type="number" id="wave-xValue" value="10" min="1" max="50" class="x-number">
+                            </div>
+                        </div>
+
+                        <div class="input-group" style="margin-top: 16px;">
+                            <label style="margin-bottom: 8px;">Permanents by CMC in library</label>
+                            <div class="type-grid">
+                                <div class="type-input">
+                                    <label>CMC 0-1</label>
+                                    <input type="number" id="wave-cmc0" value="15" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>CMC 2</label>
+                                    <input type="number" id="wave-cmc2" value="12" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>CMC 3</label>
+                                    <input type="number" id="wave-cmc3" value="10" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>CMC 4</label>
+                                    <input type="number" id="wave-cmc4" value="8" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>CMC 5</label>
+                                    <input type="number" id="wave-cmc5" value="6" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>CMC 6+</label>
+                                    <input type="number" id="wave-cmc6" value="4" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Lands</label>
+                                    <input type="number" id="wave-lands" value="32" min="0">
+                                </div>
+                                <div class="type-input">
+                                    <label>Non-Perm</label>
+                                    <input type="number" id="wave-nonperm" value="12" min="0">
+                                </div>
+                            </div>
+                            <div class="deck-total">
+                                Total cards in library: <span id="wave-deckSize">99</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="right-column">
+                    <div class="panel">
+                        <h2>📈 Expected Permanents vs X Value</h2>
+                        <div class="chart-container" style="height: 320px;">
+                            <canvas id="wave-chart"></canvas>
+                        </div>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> Expected Permanents Played</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Total Cards Revealed</span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h2>🔍 X Value Comparison</h2>
+                        <table class="comparison-table" id="wave-comparisonTable">
+                        </table>
+                    </div>
+
+                    <div class="panel" id="wave-comparison-panel" style="display: none;">
+                        <h2>⚖️ Genesis Wave vs Primal Surge</h2>
+                        <div class="insight-box" id="wave-comparison-insight">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'portent';
+
+        function switchTab(tab) {
+            // Update body theme
+            document.body.className = 'theme-' + tab;
+
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.tab-button.${tab}`).classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tab}-tab`).classList.add('active');
+
+            currentTab = tab;
+
+            // Update the respective calculator
+            if (tab === 'portent') {
+                updatePortentUI();
+            } else if (tab === 'surge') {
+                updateSurgeUI();
+            } else if (tab === 'wave') {
+                updateWaveUI();
+            }
+        }
+
+        // ==================== MOXFIELD IMPORT ====================
+
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        function extractDeckId(input) {
+            const urlPatterns = [
+                /moxfield\.com\/decks\/([a-zA-Z0-9_-]+)/,
+                /^([a-zA-Z0-9_-]{10,})$/
+            ];
+
+            for (const pattern of urlPatterns) {
+                const match = input.match(pattern);
+                if (match) return match[1];
+            }
+
+            return input.trim();
+        }
+
+        async function fetchWithProxy(url, proxyIndex = 0) {
+            if (proxyIndex >= CORS_PROXIES.length) {
+                throw new Error('All CORS proxies failed. Try again later.');
+            }
+
+            const proxyUrl = CORS_PROXIES[proxyIndex] + encodeURIComponent(url);
+
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.log(`Proxy ${proxyIndex} failed, trying next...`);
+                return fetchWithProxy(url, proxyIndex + 1);
+            }
+        }
+
+        async function importFromMoxfield(mode) {
+            const input = document.getElementById(`${mode}-moxfieldUrl`).value.trim();
+            const statusEl = document.getElementById(`${mode}-importStatus`);
+            const deckInfoEl = document.getElementById(`${mode}-deckInfo`);
+            const deckNameEl = document.getElementById(`${mode}-deckName`);
+            const importBtn = document.getElementById(`${mode}-importBtn`);
+
+            if (!input) {
+                statusEl.textContent = 'Please enter a Moxfield URL or deck ID';
+                statusEl.className = 'import-status error';
+                return;
+            }
+
+            const deckId = extractDeckId(input);
+
+            statusEl.textContent = 'Fetching deck...';
+            statusEl.className = 'import-status loading';
+            importBtn.disabled = true;
+            deckInfoEl.style.display = 'none';
+
+            try {
+                const apiUrl = `https://api2.moxfield.com/v3/decks/all/${deckId}`;
+                const data = await fetchWithProxy(apiUrl);
+
+                const typeCounts = {
+                    creature: 0,
+                    instant: 0,
+                    sorcery: 0,
+                    artifact: 0,
+                    enchantment: 0,
+                    planeswalker: 0,
+                    land: 0,
+                    battle: 0
+                };
+
+                const cmcCounts = {
+                    cmc0: 0,
+                    cmc2: 0,
+                    cmc3: 0,
+                    cmc4: 0,
+                    cmc5: 0,
+                    cmc6: 0,
+                    lands: 0,
+                    nonperm: 0
+                };
+
+                let totalCards = 0;
+
+                const boards = ['mainboard', 'commanders', 'companions'];
+
+                for (const boardName of boards) {
+                    const board = data.boards?.[boardName];
+                    if (!board?.cards) continue;
+
+                    // Skip commanders - they don't count toward deck composition
+                    if (boardName === 'commanders') continue;
+
+                    for (const [cardKey, cardData] of Object.entries(board.cards)) {
+                        const quantity = cardData.quantity || 1;
+                        const typeLine = cardData.card?.type_line || '';
+                        const cmc = cardData.card?.cmc || 0;
+
+                        totalCards += quantity;
+
+                        const typeLineLower = typeLine.toLowerCase();
+                        const isPermanent = !typeLineLower.includes('instant') && !typeLineLower.includes('sorcery');
+
+                        // Process both type counts and CMC counts
+                        if (typeLineLower.includes('creature')) {
+                            typeCounts.creature += quantity;
+                        } else if (typeLineLower.includes('planeswalker')) {
+                            typeCounts.planeswalker += quantity;
+                        } else if (typeLineLower.includes('battle')) {
+                            typeCounts.battle += quantity;
+                        } else if (typeLineLower.includes('instant')) {
+                            typeCounts.instant += quantity;
+                        } else if (typeLineLower.includes('sorcery')) {
+                            typeCounts.sorcery += quantity;
+                        } else if (typeLineLower.includes('artifact') && typeLineLower.includes('land')) {
+                            typeCounts.land += quantity;
+                        } else if (typeLineLower.includes('artifact')) {
+                            typeCounts.artifact += quantity;
+                        } else if (typeLineLower.includes('enchantment')) {
+                            typeCounts.enchantment += quantity;
+                        } else if (typeLineLower.includes('land')) {
+                            typeCounts.land += quantity;
+                        }
+
+                        // Process CMC counts for wave
+                        if (typeLineLower.includes('land')) {
+                            cmcCounts.lands += quantity;
+                        } else if (!isPermanent) {
+                            cmcCounts.nonperm += quantity;
+                        } else if (cmc <= 1) {
+                            cmcCounts.cmc0 += quantity;
+                        } else if (cmc === 2) {
+                            cmcCounts.cmc2 += quantity;
+                        } else if (cmc === 3) {
+                            cmcCounts.cmc3 += quantity;
+                        } else if (cmc === 4) {
+                            cmcCounts.cmc4 += quantity;
+                        } else if (cmc === 5) {
+                            cmcCounts.cmc5 += quantity;
+                        } else {
+                            cmcCounts.cmc6 += quantity;
+                        }
+                    }
+                }
+
+                // Update all tabs with the imported data
+                const modes = ['portent', 'surge', 'wave'];
+
+                for (const targetMode of modes) {
+                    if (targetMode === 'wave') {
+                        document.getElementById('wave-cmc0').value = cmcCounts.cmc0;
+                        document.getElementById('wave-cmc2').value = cmcCounts.cmc2;
+                        document.getElementById('wave-cmc3').value = cmcCounts.cmc3;
+                        document.getElementById('wave-cmc4').value = cmcCounts.cmc4;
+                        document.getElementById('wave-cmc5').value = cmcCounts.cmc5;
+                        document.getElementById('wave-cmc6').value = cmcCounts.cmc6;
+                        document.getElementById('wave-lands').value = cmcCounts.lands;
+                        document.getElementById('wave-nonperm').value = cmcCounts.nonperm;
+                    } else {
+                        document.getElementById(`${targetMode}-creatures`).value = typeCounts.creature;
+                        document.getElementById(`${targetMode}-instants`).value = typeCounts.instant;
+                        document.getElementById(`${targetMode}-sorceries`).value = typeCounts.sorcery;
+                        document.getElementById(`${targetMode}-artifacts`).value = typeCounts.artifact;
+                        document.getElementById(`${targetMode}-enchantments`).value = typeCounts.enchantment;
+                        document.getElementById(`${targetMode}-planeswalkers`).value = typeCounts.planeswalker;
+                        document.getElementById(`${targetMode}-lands`).value = typeCounts.land;
+                        document.getElementById(`${targetMode}-battles`).value = typeCounts.battle;
+                    }
+
+                    // Update deck name and info for all tabs
+                    const targetDeckNameEl = document.getElementById(`${targetMode}-deckName`);
+                    const targetDeckInfoEl = document.getElementById(`${targetMode}-deckInfo`);
+                    if (targetDeckNameEl && targetDeckInfoEl) {
+                        targetDeckNameEl.textContent = data.name || 'Unnamed Deck';
+                        targetDeckInfoEl.style.display = 'block';
+                    }
+                }
+
+                statusEl.textContent = `Imported ${totalCards} cards to all tabs!`;
+                statusEl.className = 'import-status success';
+
+                deckNameEl.textContent = data.name || 'Unnamed Deck';
+                deckInfoEl.style.display = 'block';
+
+                // Update all UIs
+                updatePortentUI();
+                updateSurgeUI();
+                updateWaveUI();
+
+            } catch (error) {
+                console.error('Import error:', error);
+                statusEl.textContent = `Import failed: ${error.message}`;
+                statusEl.className = 'import-status error';
+            } finally {
+                importBtn.disabled = false;
+            }
+        }
+
+        // Allow Enter key to trigger import
+        ['portent', 'surge', 'wave'].forEach(mode => {
+            document.getElementById(`${mode}-moxfieldUrl`).addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    importFromMoxfield(mode);
+                }
+            });
+        });
+
+        // ==================== PORTENT CALCULATOR ====================
+
+        const PORTENT_CONFIG = {
+            ITERATIONS: 25000,
+            X_RANGE_BEFORE: 3,
+            X_RANGE_AFTER: 4,
+            FREE_SPELL_THRESHOLD: 4
+        };
+
+        let portentSimulationCache = new Map();
+        let portentLastDeckHash = '';
+        let portentChart;
+
+        function hashDeck(typeCounts) {
+            return Object.values(typeCounts).join(',');
+        }
+
+        function simulatePortent(deckSize, typeCounts, x) {
+            const cacheKey = `${deckSize}-${x}`;
+            if (portentSimulationCache.has(cacheKey)) {
+                return portentSimulationCache.get(cacheKey);
+            }
+
+            const types = Object.keys(typeCounts).filter(t => typeCounts[t] > 0);
+            const numTypes = types.length;
+
+            const deck = new Int8Array(deckSize);
+            let idx = 0;
+            types.forEach((type, typeIdx) => {
+                const count = typeCounts[type];
+                for (let i = 0; i < count; i++) {
+                    deck[idx++] = typeIdx;
+                }
+            });
+            for (let i = idx; i < deckSize; i++) {
+                deck[i] = -1;
+            }
+
+            const typeCountDist = new Uint32Array(numTypes + 1);
+            let totalCardsToHand = 0;
+            const drawCount = Math.min(x, deckSize);
+            const iterations = PORTENT_CONFIG.ITERATIONS;
+
+            const seenTypes = new Uint8Array(numTypes);
+
+            for (let iter = 0; iter < iterations; iter++) {
+                seenTypes.fill(0);
+                let uniqueTypes = 0;
+
+                for (let i = 0; i < drawCount; i++) {
+                    const j = i + Math.floor(Math.random() * (deckSize - i));
+                    const temp = deck[i];
+                    deck[i] = deck[j];
+                    deck[j] = temp;
+
+                    const cardType = deck[i];
+                    if (cardType >= 0 && !seenTypes[cardType]) {
+                        seenTypes[cardType] = 1;
+                        uniqueTypes++;
+                    }
+                }
+
+                typeCountDist[uniqueTypes]++;
+                totalCardsToHand += uniqueTypes >= PORTENT_CONFIG.FREE_SPELL_THRESHOLD ? uniqueTypes - 1 : uniqueTypes;
+            }
+
+            const result = {
+                typeDist: Array.from(typeCountDist).map(c => c / iterations),
+                expectedCardsToHand: totalCardsToHand / iterations
+            };
+
+            portentSimulationCache.set(cacheKey, result);
+            return result;
+        }
+
+        function getPortentDeckConfig() {
+            const types = {
+                creature: parseInt(document.getElementById('portent-creatures').value) || 0,
+                instant: parseInt(document.getElementById('portent-instants').value) || 0,
+                sorcery: parseInt(document.getElementById('portent-sorceries').value) || 0,
+                artifact: parseInt(document.getElementById('portent-artifacts').value) || 0,
+                enchantment: parseInt(document.getElementById('portent-enchantments').value) || 0,
+                planeswalker: parseInt(document.getElementById('portent-planeswalkers').value) || 0,
+                land: parseInt(document.getElementById('portent-lands').value) || 0,
+                battle: parseInt(document.getElementById('portent-battles').value) || 0
+            };
+
+            const deckSize = Object.values(types).reduce((sum, count) => sum + count, 0);
+
+            const newHash = hashDeck(types);
+            if (newHash !== portentLastDeckHash) {
+                portentSimulationCache.clear();
+                portentLastDeckHash = newHash;
+            }
+
+            document.getElementById('portent-deckSize').textContent = deckSize;
+
+            const xSlider = document.getElementById('portent-xSlider');
+            xSlider.max = Math.min(deckSize, 30);
+
+            return {
+                deckSize,
+                x: parseInt(document.getElementById('portent-xValue').value) || 5,
+                types
+            };
+        }
+
+        function calculatePortent() {
+            const config = getPortentDeckConfig();
+
+            if (config.deckSize === 0) {
+                return { config, results: {} };
+            }
+
+            const results = {};
+            const minX = Math.max(1, config.x - PORTENT_CONFIG.X_RANGE_BEFORE);
+            const maxX = Math.min(config.x + PORTENT_CONFIG.X_RANGE_AFTER, config.deckSize);
+
+            for (let testX = minX; testX <= maxX; testX++) {
+                const sim = simulatePortent(config.deckSize, config.types, testX);
+                const typeDist = sim.typeDist;
+
+                results[testX] = {
+                    expectedCards: sim.expectedCardsToHand,
+                    prob4Plus: typeDist.slice(PORTENT_CONFIG.FREE_SPELL_THRESHOLD).reduce((a, b) => a + b, 0),
+                    probExact4: typeDist[PORTENT_CONFIG.FREE_SPELL_THRESHOLD] || 0,
+                    prob5Plus: typeDist.slice(PORTENT_CONFIG.FREE_SPELL_THRESHOLD + 1).reduce((a, b) => a + b, 0),
+                    expectedTypes: typeDist.reduce((sum, p, i) => sum + p * i, 0)
+                };
+            }
+
+            return { config, results };
+        }
+
+        function updatePortentUI() {
+            const { config, results } = calculatePortent();
+
+            if (config.deckSize === 0 || Object.keys(results).length === 0) {
+                if (portentChart) portentChart.destroy();
+                document.getElementById('portent-comparisonTable').innerHTML = '';
+                return;
+            }
+
+            const current = results[config.x] || results[Object.keys(results)[0]];
+
+            const xValues = Object.keys(results).map(Number).sort((a, b) => a - b);
+            const prob4PlusData = xValues.map(x => results[x].prob4Plus * 100);
+            const expectedCardsData = xValues.map(x => results[x].expectedCards);
+
+            if (portentChart) portentChart.destroy();
+            portentChart = new Chart(document.getElementById('portent-combinedChart'), {
+                type: 'line',
+                data: {
+                    labels: xValues.map(x => 'X=' + x),
+                    datasets: [
+                        {
+                            label: 'P(Free Spell) %',
+                            data: prob4PlusData,
+                            borderColor: '#c084fc',
+                            backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                            pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
+                            yAxisID: 'yProb'
+                        },
+                        {
+                            label: 'Expected Cards',
+                            data: expectedCardsData,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                            pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
+                            yAxisID: 'yCards'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    if (ctx.datasetIndex === 0) {
+                                        return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
+                                    } else {
+                                        return `Cards to hand: ${ctx.parsed.y.toFixed(2)}`;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        yProb: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
+                            grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                            ticks: { color: '#c084fc' }
+                        },
+                        yCards: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            title: { display: true, text: 'Expected Cards', color: '#dc2626' },
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#dc2626' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                            ticks: { color: '#a09090' }
+                        }
+                    }
+                }
+            });
+
+            let tableHTML = `
+                <tr>
+                    <th>X</th>
+                    <th>P(Free Spell)</th>
+                    <th>Δ Prob</th>
+                    <th>E[Cards]</th>
+                    <th>Δ Cards</th>
+                </tr>
+            `;
+
+            const currentResult = results[config.x];
+
+            xValues.forEach((x, i) => {
+                const r = results[x];
+                const deltaProb = (r.prob4Plus - currentResult.prob4Plus) * 100;
+                const deltaCards = r.expectedCards - currentResult.expectedCards;
+
+                const rowClass = x === config.x ? 'current' : '';
+                const isBaseline = x === config.x;
+
+                const probClass = deltaProb > 0.01 ? 'marginal-positive' : (deltaProb < -0.01 ? 'marginal-negative' : '');
+                const cardsClass = deltaCards > 0.001 ? 'marginal-positive' : (deltaCards < -0.001 ? 'marginal-negative' : '');
+
+                tableHTML += `
+                    <tr class="${rowClass}">
+                        <td>${x}</td>
+                        <td>${(r.prob4Plus * 100).toFixed(1)}%</td>
+                        <td class="${probClass}">
+                            ${isBaseline ? '-' : (deltaProb >= 0 ? '+' : '') + deltaProb.toFixed(1) + '%'}
+                        </td>
+                        <td>${r.expectedCards.toFixed(2)}</td>
+                        <td class="${cardsClass}">
+                            ${isBaseline ? '-' : (deltaCards >= 0 ? '+' : '') + deltaCards.toFixed(2)}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('portent-comparisonTable').innerHTML = tableHTML;
+        }
+
+        // ==================== PRIMAL SURGE CALCULATOR ====================
+
+        const SURGE_CONFIG = {
+            ITERATIONS: 15000
+        };
+
+        let surgeChart;
+
+        function simulatePrimalSurge(deckSize, nonPermanents, permanents) {
+            const iterations = SURGE_CONFIG.ITERATIONS;
+            let totalPermanents = 0;
+
+            // Build deck: 0 = permanent, 1 = non-permanent
+            const deck = new Uint8Array(deckSize);
+            for (let i = 0; i < nonPermanents; i++) {
+                deck[i] = 1;
+            }
+            // Rest are permanents (default 0)
+
+            for (let iter = 0; iter < iterations; iter++) {
+                // Shuffle using Fisher-Yates
+                for (let i = deckSize - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    const temp = deck[i];
+                    deck[i] = deck[j];
+                    deck[j] = temp;
+                }
+
+                // Count permanents until we hit a non-permanent
+                let count = 0;
+                for (let i = 0; i < deckSize; i++) {
+                    if (deck[i] === 1) {
+                        break; // Hit a non-permanent
+                    }
+                    count++;
+                }
+
+                totalPermanents += count;
+            }
+
+            return {
+                expectedPermanents: totalPermanents / iterations,
+                percentOfDeck: (totalPermanents / iterations / deckSize) * 100
+            };
+        }
+
+        function getSurgeDeckConfig() {
+            const types = {
+                creature: parseInt(document.getElementById('surge-creatures').value) || 0,
+                instant: parseInt(document.getElementById('surge-instants').value) || 0,
+                sorcery: parseInt(document.getElementById('surge-sorceries').value) || 0,
+                artifact: parseInt(document.getElementById('surge-artifacts').value) || 0,
+                enchantment: parseInt(document.getElementById('surge-enchantments').value) || 0,
+                planeswalker: parseInt(document.getElementById('surge-planeswalkers').value) || 0,
+                land: parseInt(document.getElementById('surge-lands').value) || 0,
+                battle: parseInt(document.getElementById('surge-battles').value) || 0
+            };
+
+            const nonPermanents = types.instant + types.sorcery;
+            const permanents = types.creature + types.artifact + types.enchantment +
+                              types.planeswalker + types.land + types.battle;
+            const deckSize = nonPermanents + permanents;
+
+            document.getElementById('surge-deckSize').textContent = deckSize;
+
+            return { deckSize, nonPermanents, permanents };
+        }
+
+        function calculateSurge() {
+            const config = getSurgeDeckConfig();
+
+            if (config.deckSize === 0) {
+                return { config, result: null };
+            }
+
+            const result = simulatePrimalSurge(config.deckSize, config.nonPermanents, config.permanents);
+
+            return { config, result };
+        }
+
+        function updateSurgeUI() {
+            const { config, result } = calculateSurge();
+
+            if (config.deckSize === 0 || !result) {
+                if (surgeChart) surgeChart.destroy();
+                document.getElementById('surge-statsTable').innerHTML = '';
+                return;
+            }
+
+            // Create chart showing simulation across different deck compositions
+            const nonPermRange = [];
+            const expectedPermsData = [];
+            const percentData = [];
+
+            // Show results for different numbers of non-permanents
+            const maxNonPerm = Math.min(20, Math.floor(config.deckSize * 0.3));
+            for (let i = 0; i <= maxNonPerm; i++) {
+                const sim = simulatePrimalSurge(config.deckSize, i, config.deckSize - i);
+                nonPermRange.push(i);
+                expectedPermsData.push(sim.expectedPermanents);
+                percentData.push(sim.percentOfDeck);
+            }
+
+            if (surgeChart) surgeChart.destroy();
+            surgeChart = new Chart(document.getElementById('surge-chart'), {
+                type: 'line',
+                data: {
+                    labels: nonPermRange.map(x => x + ' non-perm'),
+                    datasets: [
+                        {
+                            label: 'Expected Permanents',
+                            data: expectedPermsData,
+                            borderColor: '#4ade80',
+                            backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                            pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80'),
+                            yAxisID: 'yPerms'
+                        },
+                        {
+                            label: '% of Deck',
+                            data: percentData,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                            pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626'),
+                            yAxisID: 'yPercent'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    if (ctx.datasetIndex === 0) {
+                                        return `Expected permanents: ${ctx.parsed.y.toFixed(1)}`;
+                                    } else {
+                                        return `% of deck: ${ctx.parsed.y.toFixed(1)}%`;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        yPerms: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            title: { display: true, text: 'Expected Permanents', color: '#4ade80' },
+                            grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                            ticks: { color: '#4ade80' }
+                        },
+                        yPercent: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: '% of Deck', color: '#dc2626' },
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#dc2626' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                            ticks: { color: '#a09090' }
+                        }
+                    }
+                }
+            });
+
+            // Stats table
+            let tableHTML = `
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+                <tr>
+                    <td>Total Cards</td>
+                    <td>${config.deckSize}</td>
+                </tr>
+                <tr>
+                    <td>Permanents</td>
+                    <td>${config.permanents}</td>
+                </tr>
+                <tr>
+                    <td>Non-Permanents</td>
+                    <td>${config.nonPermanents}</td>
+                </tr>
+                <tr class="current">
+                    <td>Expected Permanents Played</td>
+                    <td>${result.expectedPermanents.toFixed(2)}</td>
+                </tr>
+                <tr class="current">
+                    <td>% of Deck Played</td>
+                    <td>${result.percentOfDeck.toFixed(1)}%</td>
+                </tr>
+                <tr>
+                    <td>P(Play Entire Deck)</td>
+                    <td>${config.nonPermanents === 0 ? '100%' : ((1 / config.deckSize) * 100).toFixed(2) + '%'}</td>
+                </tr>
+            `;
+
+            document.getElementById('surge-statsTable').innerHTML = tableHTML;
+
+            // Compare with Genesis Wave X=7
+            const waveX7 = simulateGenesisWave(config.deckSize, {
+                cmc0: 0, cmc2: 0, cmc3: 0, cmc4: 0, cmc5: 0, cmc6: 0,
+                lands: config.permanents,
+                nonperm: config.nonPermanents
+            }, 7);
+
+            const comparisonPanel = document.getElementById('surge-comparison-panel');
+            const comparisonInsight = document.getElementById('surge-comparison-insight');
+
+            if (waveX7) {
+                const surgeBetter = result.expectedPermanents > waveX7.expectedPermanents;
+                const difference = Math.abs(result.expectedPermanents - waveX7.expectedPermanents);
+                const percentDiff = ((difference / waveX7.expectedPermanents) * 100).toFixed(1);
+
+                comparisonPanel.style.display = 'block';
+                comparisonInsight.innerHTML = `
+                    <h3>Comparison at 10 Mana</h3>
+                    <p>
+                        <strong>Primal Surge (10 mana):</strong> ${result.expectedPermanents.toFixed(2)} expected permanents<br>
+                        <strong>Genesis Wave X=7 (10 mana):</strong> ${waveX7.expectedPermanents.toFixed(2)} expected permanents<br><br>
+                        ${surgeBetter
+                            ? `<span class="marginal-positive">✓ Primal Surge is better by ${difference.toFixed(2)} permanents (${percentDiff}% more)</span>`
+                            : `<span class="marginal-negative">✗ Genesis Wave X=7 is better by ${difference.toFixed(2)} permanents (${percentDiff}% more)</span>`
+                        }
+                    </p>
+                `;
+            }
+        }
+
+        // ==================== GENESIS WAVE CALCULATOR ====================
+
+        const WAVE_CONFIG = {
+            ITERATIONS: 20000,
+            X_RANGE_BEFORE: 4,
+            X_RANGE_AFTER: 4
+        };
+
+        let waveChart;
+        let waveSimulationCache = new Map();
+        let waveLastDeckHash = '';
+
+        function simulateGenesisWave(deckSize, cmcCounts, x) {
+            const cacheKey = `${deckSize}-${x}-${Object.values(cmcCounts).join(',')}`;
+            if (waveSimulationCache.has(cacheKey)) {
+                return waveSimulationCache.get(cacheKey);
+            }
+
+            // Build deck: 0 = permanent, 1 = non-permanent
+            const deck = new Uint8Array(deckSize);
+            let idx = 0;
+
+            // All permanents (lands + all CMC permanents)
+            const totalPermanents = cmcCounts.lands + cmcCounts.cmc0 + cmcCounts.cmc2 +
+                                   cmcCounts.cmc3 + cmcCounts.cmc4 + cmcCounts.cmc5 + cmcCounts.cmc6;
+
+            for (let i = 0; i < totalPermanents; i++) {
+                deck[idx++] = 0;
+            }
+
+            // Non-permanents
+            for (let i = 0; i < cmcCounts.nonperm; i++) {
+                deck[idx++] = 1;
+            }
+
+            const iterations = WAVE_CONFIG.ITERATIONS;
+            let totalPermanentsPlayed = 0;
+            const drawCount = Math.min(x, deckSize);
+
+            for (let iter = 0; iter < iterations; iter++) {
+                // Partial Fisher-Yates
+                for (let i = 0; i < drawCount; i++) {
+                    const j = i + Math.floor(Math.random() * (deckSize - i));
+                    const temp = deck[i];
+                    deck[i] = deck[j];
+                    deck[j] = temp;
+                }
+
+                // Count permanents
+                let count = 0;
+                for (let i = 0; i < drawCount; i++) {
+                    if (deck[i] === 0) {
+                        count++;
+                    }
+                }
+
+                totalPermanentsPlayed += count;
+            }
+
+            const result = {
+                expectedPermanents: totalPermanentsPlayed / iterations
+            };
+
+            waveSimulationCache.set(cacheKey, result);
+            return result;
+        }
+
+        function getWaveDeckConfig() {
+            const cmcCounts = {
+                cmc0: parseInt(document.getElementById('wave-cmc0').value) || 0,
+                cmc2: parseInt(document.getElementById('wave-cmc2').value) || 0,
+                cmc3: parseInt(document.getElementById('wave-cmc3').value) || 0,
+                cmc4: parseInt(document.getElementById('wave-cmc4').value) || 0,
+                cmc5: parseInt(document.getElementById('wave-cmc5').value) || 0,
+                cmc6: parseInt(document.getElementById('wave-cmc6').value) || 0,
+                lands: parseInt(document.getElementById('wave-lands').value) || 0,
+                nonperm: parseInt(document.getElementById('wave-nonperm').value) || 0
+            };
+
+            const deckSize = Object.values(cmcCounts).reduce((sum, count) => sum + count, 0);
+
+            const newHash = Object.values(cmcCounts).join(',');
+            if (newHash !== waveLastDeckHash) {
+                waveSimulationCache.clear();
+                waveLastDeckHash = newHash;
+            }
+
+            document.getElementById('wave-deckSize').textContent = deckSize;
+
+            const xSlider = document.getElementById('wave-xSlider');
+            xSlider.max = Math.min(deckSize, 30);
+
+            return {
+                deckSize,
+                x: parseInt(document.getElementById('wave-xValue').value) || 10,
+                cmcCounts
+            };
+        }
+
+        function calculateWave() {
+            const config = getWaveDeckConfig();
+
+            if (config.deckSize === 0) {
+                return { config, results: {} };
+            }
+
+            const results = {};
+            const minX = Math.max(1, config.x - WAVE_CONFIG.X_RANGE_BEFORE);
+            const maxX = Math.min(config.x + WAVE_CONFIG.X_RANGE_AFTER, config.deckSize);
+
+            for (let testX = minX; testX <= maxX; testX++) {
+                const sim = simulateGenesisWave(config.deckSize, config.cmcCounts, testX);
+
+                results[testX] = {
+                    expectedPermanents: sim.expectedPermanents,
+                    cardsRevealed: testX
+                };
+            }
+
+            return { config, results };
+        }
+
+        function updateWaveUI() {
+            const { config, results } = calculateWave();
+
+            if (config.deckSize === 0 || Object.keys(results).length === 0) {
+                if (waveChart) waveChart.destroy();
+                document.getElementById('wave-comparisonTable').innerHTML = '';
+                return;
+            }
+
+            const xValues = Object.keys(results).map(Number).sort((a, b) => a - b);
+            const expectedPermsData = xValues.map(x => results[x].expectedPermanents);
+            const cardsRevealedData = xValues.map(x => results[x].cardsRevealed);
+
+            if (waveChart) waveChart.destroy();
+            waveChart = new Chart(document.getElementById('wave-chart'), {
+                type: 'line',
+                data: {
+                    labels: xValues.map(x => 'X=' + x),
+                    datasets: [
+                        {
+                            label: 'Expected Permanents',
+                            data: expectedPermsData,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                            pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#38bdf8'),
+                            yAxisID: 'yPerms'
+                        },
+                        {
+                            label: 'Cards Revealed',
+                            data: cardsRevealedData,
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                            pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#22c55e'),
+                            yAxisID: 'yCards'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    if (ctx.datasetIndex === 0) {
+                                        return `Permanents played: ${ctx.parsed.y.toFixed(2)}`;
+                                    } else {
+                                        return `Cards revealed: ${ctx.parsed.y}`;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        yPerms: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            title: { display: true, text: 'Expected Permanents', color: '#38bdf8' },
+                            grid: { color: 'rgba(14, 165, 233, 0.2)' },
+                            ticks: { color: '#38bdf8' }
+                        },
+                        yCards: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            title: { display: true, text: 'Cards Revealed', color: '#22c55e' },
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#22c55e' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(14, 165, 233, 0.2)' },
+                            ticks: { color: '#a09090' }
+                        }
+                    }
+                }
+            });
+
+            let tableHTML = `
+                <tr>
+                    <th>X</th>
+                    <th>Cards Revealed</th>
+                    <th>Expected Perms</th>
+                    <th>Δ Perms</th>
+                    <th>Efficiency</th>
+                </tr>
+            `;
+
+            const currentResult = results[config.x];
+
+            xValues.forEach((x) => {
+                const r = results[x];
+                const deltaPerms = r.expectedPermanents - currentResult.expectedPermanents;
+                const efficiency = (r.expectedPermanents / r.cardsRevealed) * 100;
+
+                const rowClass = x === config.x ? 'current' : '';
+                const isBaseline = x === config.x;
+
+                const deltaClass = deltaPerms > 0.01 ? 'marginal-positive' : (deltaPerms < -0.01 ? 'marginal-negative' : '');
+
+                tableHTML += `
+                    <tr class="${rowClass}">
+                        <td>${x}</td>
+                        <td>${r.cardsRevealed}</td>
+                        <td>${r.expectedPermanents.toFixed(2)}</td>
+                        <td class="${deltaClass}">
+                            ${isBaseline ? '-' : (deltaPerms >= 0 ? '+' : '') + deltaPerms.toFixed(2)}
+                        </td>
+                        <td>${efficiency.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('wave-comparisonTable').innerHTML = tableHTML;
+
+            // Compare with Primal Surge if X >= 7
+            const comparisonPanel = document.getElementById('wave-comparison-panel');
+            const comparisonInsight = document.getElementById('wave-comparison-insight');
+
+            if (config.x >= 7) {
+                const totalPermanents = config.cmcCounts.lands + config.cmcCounts.cmc0 +
+                                       config.cmcCounts.cmc2 + config.cmcCounts.cmc3 +
+                                       config.cmcCounts.cmc4 + config.cmcCounts.cmc5 +
+                                       config.cmcCounts.cmc6;
+                const nonPermanents = config.cmcCounts.nonperm;
+
+                const surgeResult = simulatePrimalSurge(config.deckSize, nonPermanents, totalPermanents);
+                const waveResult = results[config.x];
+
+                const waveBetter = waveResult.expectedPermanents > surgeResult.expectedPermanents;
+                const difference = Math.abs(waveResult.expectedPermanents - surgeResult.expectedPermanents);
+                const percentDiff = ((difference / surgeResult.expectedPermanents) * 100).toFixed(1);
+
+                comparisonPanel.style.display = 'block';
+                comparisonInsight.innerHTML = `
+                    <h3>Comparison at 10 Mana</h3>
+                    <p>
+                        <strong>Genesis Wave X=${config.x} (${config.x + 3} mana):</strong> ${waveResult.expectedPermanents.toFixed(2)} expected permanents<br>
+                        <strong>Primal Surge (10 mana):</strong> ${surgeResult.expectedPermanents.toFixed(2)} expected permanents<br><br>
+                        ${waveBetter
+                            ? `<span class="marginal-positive">✓ Genesis Wave X=${config.x} is better by ${difference.toFixed(2)} permanents (${percentDiff}% more)</span>`
+                            : `<span class="marginal-negative">✗ Primal Surge is better by ${difference.toFixed(2)} permanents (${percentDiff}% more)</span>`
+                        }
+                    </p>
+                `;
+            } else {
+                comparisonPanel.style.display = 'none';
+            }
+        }
+
+        // ==================== EVENT LISTENERS ====================
+
+        let updateTimeout;
+        function debouncedUpdate(mode) {
+            clearTimeout(updateTimeout);
+            updateTimeout = setTimeout(() => {
+                if (mode === 'portent') {
+                    updatePortentUI();
+                } else if (mode === 'surge') {
+                    updateSurgeUI();
+                } else if (mode === 'wave') {
+                    updateWaveUI();
+                }
+            }, 150);
+        }
+
+        // Portent listeners
+        const portentXSlider = document.getElementById('portent-xSlider');
+        const portentXNumber = document.getElementById('portent-xValue');
+
+        portentXSlider.addEventListener('input', () => {
+            portentXNumber.value = portentXSlider.value;
+            debouncedUpdate('portent');
+        });
+
+        portentXNumber.addEventListener('input', () => {
+            const val = parseInt(portentXNumber.value) || 1;
+            portentXSlider.value = Math.min(Math.max(val, 1), 30);
+            debouncedUpdate('portent');
+        });
+
+        document.querySelectorAll('[id^="portent-"][id$="creatures"], [id^="portent-"][id$="instants"], [id^="portent-"][id$="sorceries"], [id^="portent-"][id$="artifacts"], [id^="portent-"][id$="enchantments"], [id^="portent-"][id$="planeswalkers"], [id^="portent-"][id$="lands"], [id^="portent-"][id$="battles"]').forEach(input => {
+            input.addEventListener('input', () => debouncedUpdate('portent'));
+        });
+
+        // Surge listeners
+        document.querySelectorAll('[id^="surge-"][id$="creatures"], [id^="surge-"][id$="instants"], [id^="surge-"][id$="sorceries"], [id^="surge-"][id$="artifacts"], [id^="surge-"][id$="enchantments"], [id^="surge-"][id$="planeswalkers"], [id^="surge-"][id$="lands"], [id^="surge-"][id$="battles"]').forEach(input => {
+            input.addEventListener('input', () => debouncedUpdate('surge'));
+        });
+
+        // Wave listeners
+        const waveXSlider = document.getElementById('wave-xSlider');
+        const waveXNumber = document.getElementById('wave-xValue');
+
+        waveXSlider.addEventListener('input', () => {
+            waveXNumber.value = waveXSlider.value;
+            debouncedUpdate('wave');
+        });
+
+        waveXNumber.addEventListener('input', () => {
+            const val = parseInt(waveXNumber.value) || 1;
+            waveXSlider.value = Math.min(Math.max(val, 1), 30);
+            debouncedUpdate('wave');
+        });
+
+        document.querySelectorAll('[id^="wave-cmc"], [id^="wave-lands"], [id^="wave-nonperm"]').forEach(input => {
+            input.addEventListener('input', () => debouncedUpdate('wave'));
+        });
+
+        // Initialize
+        updatePortentUI();
+    </script>
+</body>
+</html>

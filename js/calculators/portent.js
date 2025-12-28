@@ -4,6 +4,7 @@
  */
 
 import { createCache, partialShuffle, formatNumber, formatPercentage } from '../utils/simulation.js';
+import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
     ITERATIONS: 25000,
@@ -80,19 +81,20 @@ function simulatePortent(deckSize, typeCounts, x) {
 }
 
 /**
- * Get current deck configuration from DOM
+ * Get current deck configuration from shared config
  * @returns {Object} - Deck configuration
  */
 export function getDeckConfig() {
+    const config = DeckConfig.getDeckConfig();
     const types = {
-        creature: parseInt(document.getElementById('portent-creatures').value) || 0,
-        instant: parseInt(document.getElementById('portent-instants').value) || 0,
-        sorcery: parseInt(document.getElementById('portent-sorceries').value) || 0,
-        artifact: parseInt(document.getElementById('portent-artifacts').value) || 0,
-        enchantment: parseInt(document.getElementById('portent-enchantments').value) || 0,
-        planeswalker: parseInt(document.getElementById('portent-planeswalkers').value) || 0,
-        land: parseInt(document.getElementById('portent-lands').value) || 0,
-        battle: parseInt(document.getElementById('portent-battles').value) || 0
+        creature: config.creatures,
+        instant: config.instants,
+        sorcery: config.sorceries,
+        artifact: config.artifacts,
+        enchantment: config.enchantments,
+        planeswalker: config.planeswalkers,
+        land: config.lands,
+        battle: config.battles
     };
 
     const deckSize = Object.values(types).reduce((sum, count) => sum + count, 0);
@@ -104,10 +106,10 @@ export function getDeckConfig() {
         lastDeckHash = newHash;
     }
 
-    document.getElementById('portent-deckSize').textContent = deckSize;
-
     const xSlider = document.getElementById('portent-xSlider');
-    xSlider.max = Math.min(deckSize, 30);
+    if (xSlider) {
+        xSlider.max = Math.min(deckSize, 30);
+    }
 
     return {
         deckSize,
@@ -304,13 +306,3 @@ export function updateUI() {
  * Update deck inputs from imported data
  * @param {Object} typeCounts - Type counts from import
  */
-export function updateFromImport(typeCounts) {
-    document.getElementById('portent-creatures').value = typeCounts.creature;
-    document.getElementById('portent-instants').value = typeCounts.instant;
-    document.getElementById('portent-sorceries').value = typeCounts.sorcery;
-    document.getElementById('portent-artifacts').value = typeCounts.artifact;
-    document.getElementById('portent-enchantments').value = typeCounts.enchantment;
-    document.getElementById('portent-planeswalkers').value = typeCounts.planeswalker;
-    document.getElementById('portent-lands').value = typeCounts.land;
-    document.getElementById('portent-battles').value = typeCounts.battle;
-}

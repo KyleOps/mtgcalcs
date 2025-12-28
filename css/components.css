@@ -690,3 +690,96 @@
     color: var(--text-secondary);
     line-height: 1.5;
 }
+
+/* ==================== COLLAPSIBLE PANELS ==================== */
+
+.collapsible-panel {
+    overflow: hidden;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    margin: calc(var(--spacing-xl) * -1);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    transition: background var(--transition-fast);
+}
+
+.panel-header:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.panel-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.collapse-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    transition: transform var(--transition-fast), color var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+.collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.theme-portent .collapse-btn:hover {
+    color: var(--portent-primary);
+}
+
+.theme-surge .collapse-btn:hover {
+    color: var(--surge-primary);
+}
+
+.theme-wave .collapse-btn:hover {
+    color: var(--wave-primary);
+}
+
+.collapse-icon {
+    display: inline-block;
+    transition: transform var(--transition-normal);
+}
+
+.panel-content {
+    max-height: 2000px;
+    overflow: visible;
+    transition: max-height var(--transition-slow) ease-in-out, opacity var(--transition-normal);
+    opacity: 1;
+}
+
+.collapsible-panel:not(.expanded) .panel-content {
+    max-height: 0;
+    opacity: 0;
+}
+
+.collapsible-panel:not(.expanded) .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* Mobile: Config collapsed by default, results expanded */
+@media (max-width: 900px) {
+    .collapsible-panel.config {
+        margin-bottom: var(--spacing-lg);
+    }
+    
+    .collapsible-panel.config:not(.expanded) {
+        margin-bottom: var(--spacing-md);
+    }
+}

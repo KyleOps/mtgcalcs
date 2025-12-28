@@ -6,8 +6,9 @@
 import * as Portent from './calculators/portent.js';
 import * as Surge from './calculators/surge.js';
 import * as Wave from './calculators/wave.js';
-import { extractDeckId, importFromMoxfield } from './utils/moxfield.js';
 import { debounce } from './utils/simulation.js';
+import * as Components from './utils/components.js';
+import * as DeckConfig from './utils/deckConfig.js';
 
 // Current active tab
 let currentTab = 'portent';
@@ -46,76 +47,6 @@ function switchTab(tab) {
 }
 
 /**
- * Handle Moxfield import for a specific calculator
- * @param {string} mode - Calculator mode (portent, surge, wave)
- */
-async function handleImport(mode) {
-    const input = document.getElementById(`${mode}-moxfieldUrl`).value.trim();
-    const statusEl = document.getElementById(`${mode}-importStatus`);
-    const deckInfoEl = document.getElementById(`${mode}-deckInfo`);
-    const deckNameEl = document.getElementById(`${mode}-deckName`);
-    const importBtn = document.getElementById(`${mode}-importBtn`);
-
-    if (!input) {
-        statusEl.textContent = 'Please enter a Moxfield URL or deck ID';
-        statusEl.className = 'import-status error';
-        return;
-    }
-
-    const deckId = extractDeckId(input);
-
-    statusEl.textContent = 'Fetching deck...';
-    statusEl.className = 'import-status loading';
-    importBtn.disabled = true;
-    deckInfoEl.style.display = 'none';
-
-    try {
-        const deckData = await importFromMoxfield(deckId);
-
-        // Update all tabs with the imported data
-        const modes = ['portent', 'surge', 'wave'];
-
-        for (const targetMode of modes) {
-            if (targetMode === 'wave') {
-                Wave.updateFromImport(deckData.cmcCounts);
-            } else {
-                if (targetMode === 'portent') {
-                    Portent.updateFromImport(deckData.typeCounts);
-                } else if (targetMode === 'surge') {
-                    Surge.updateFromImport(deckData.typeCounts);
-                }
-            }
-
-            // Update deck name and info for all tabs
-            const targetDeckNameEl = document.getElementById(`${targetMode}-deckName`);
-            const targetDeckInfoEl = document.getElementById(`${targetMode}-deckInfo`);
-            if (targetDeckNameEl && targetDeckInfoEl) {
-                targetDeckNameEl.textContent = deckData.deckName;
-                targetDeckInfoEl.style.display = 'block';
-            }
-        }
-
-        statusEl.textContent = `Imported ${deckData.totalCards} cards to all tabs!`;
-        statusEl.className = 'import-status success';
-
-        deckNameEl.textContent = deckData.deckName;
-        deckInfoEl.style.display = 'block';
-
-        // Update all UIs
-        Portent.updateUI();
-        Surge.updateUI();
-        Wave.updateUI();
-
-    } catch (error) {
-        console.error('Import error:', error);
-        statusEl.textContent = `Import failed: ${error.message}`;
-        statusEl.className = 'import-status error';
-    } finally {
-        importBtn.disabled = false;
-    }
-}
-
-/**
  * Initialize tab navigation
  */
 function initTabNavigation() {
@@ -126,26 +57,6 @@ function initTabNavigation() {
     });
 }
 
-/**
- * Initialize import handlers
- */
-function initImportHandlers() {
-    const modes = ['portent', 'surge', 'wave'];
-
-    modes.forEach(mode => {
-        const importBtn = document.getElementById(`${mode}-importBtn`);
-        const urlInput = document.getElementById(`${mode}-moxfieldUrl`);
-
-        importBtn.addEventListener('click', () => handleImport(mode));
-
-        // Allow Enter key to trigger import
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleImport(mode);
-            }
-        });
-    });
-}
 
 /**
  * Initialize Portent calculator inputs
@@ -168,16 +79,8 @@ function initPortentInputs() {
         debouncedUpdate();
     });
 
-    // Type inputs
-    const typeInputs = [
-        'portent-creatures', 'portent-instants', 'portent-sorceries',
-        'portent-artifacts', 'portent-enchantments', 'portent-planeswalkers',
-        'portent-lands', 'portent-battles'
-    ];
-
-    typeInputs.forEach(id => {
-        document.getElementById(id).addEventListener('input', debouncedUpdate);
-    });
+    // Listen for deck config changes
+    DeckConfig.onDeckUpdate(() => debouncedUpdate());
 }
 
 /**
@@ -186,16 +89,8 @@ function initPortentInputs() {
 function initSurgeInputs() {
     const debouncedUpdate = debounce(() => Surge.updateUI(), 150);
 
-    // Type inputs
-    const typeInputs = [
-        'surge-creatures', 'surge-instants', 'surge-sorceries',
-        'surge-artifacts', 'surge-enchantments', 'surge-planeswalkers',
-        'surge-lands', 'surge-battles'
-    ];
-
-    typeInputs.forEach(id => {
-        document.getElementById(id).addEventListener('input', debouncedUpdate);
-    });
+    // Listen for deck config changes
+    DeckConfig.onDeckUpdate(() => debouncedUpdate());
 }
 
 /**
@@ -219,15 +114,8 @@ function initWaveInputs() {
         debouncedUpdate();
     });
 
-    // CMC inputs
-    const cmcInputs = [
-        'wave-cmc0', 'wave-cmc2', 'wave-cmc3', 'wave-cmc4',
-        'wave-cmc5', 'wave-cmc6', 'wave-lands', 'wave-nonperm'
-    ];
-
-    cmcInputs.forEach(id => {
-        document.getElementById(id).addEventListener('input', debouncedUpdate);
-    });
+    // Listen for deck config changes
+    DeckConfig.onDeckUpdate(() => debouncedUpdate());
 }
 
 /**
@@ -236,28 +124,51 @@ function initWaveInputs() {
 function initServiceWorker() {
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
+            // Get the correct path for service worker based on deployment
+            const swPath = window.location.pathname.includes('/mtgcalcs/')
+                ? '/mtgcalcs/sw.js'
+                : '/sw.js';
+
+            navigator.serviceWorker.register(swPath)
                 .then(registration => {
                     console.log('ServiceWorker registered:', registration);
                 })
                 .catch(error => {
-                    console.log('ServiceWorker registration failed:', error);
+                    console.log('ServiceWorker registration failed (optional):', error);
                 });
         });
     }
 }
 
 /**
+ * Initialize UX enhancements
+ */
+function initUXEnhancements() {
+    // Initialize collapsible panels
+    Components.initCollapsiblePanels();
+
+    // Auto-collapse config on mobile after calculations
+    window.addEventListener('resize', () => {
+        if (window.innerWidth <= 900) {
+            Components.autoCollapseOnMobile();
+        }
+    });
+}
+
+/**
  * Initialize application
  */
 function init() {
+    // Initialize shared deck configuration first
+    DeckConfig.initDeckConfig();
+
     // Initialize all components
     initTabNavigation();
-    initImportHandlers();
     initPortentInputs();
     initSurgeInputs();
     initWaveInputs();
     initServiceWorker();
+    initUXEnhancements();
 
     // Initial render
     Portent.updateUI();
@@ -271,6 +182,11 @@ function init() {
             else if (e.key === '3') switchTab('wave');
         }
     });
+
+    // Mark as visited
+    if (!localStorage.getItem('visited')) {
+        localStorage.setItem('visited', 'true');
+    }
 
     console.log('MTG Calculator initialized');
 }

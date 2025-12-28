@@ -4,6 +4,7 @@
  */
 
 import { formatNumber, formatPercentage } from '../utils/simulation.js';
+import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
     ITERATIONS: 15000
@@ -56,27 +57,16 @@ export function simulatePrimalSurge(deckSize, nonPermanents, permanents) {
 }
 
 /**
- * Get current deck configuration from DOM
+ * Get current deck configuration from shared config
  * @returns {Object} - Deck configuration
  */
 export function getDeckConfig() {
-    const types = {
-        creature: parseInt(document.getElementById('surge-creatures').value) || 0,
-        instant: parseInt(document.getElementById('surge-instants').value) || 0,
-        sorcery: parseInt(document.getElementById('surge-sorceries').value) || 0,
-        artifact: parseInt(document.getElementById('surge-artifacts').value) || 0,
-        enchantment: parseInt(document.getElementById('surge-enchantments').value) || 0,
-        planeswalker: parseInt(document.getElementById('surge-planeswalkers').value) || 0,
-        land: parseInt(document.getElementById('surge-lands').value) || 0,
-        battle: parseInt(document.getElementById('surge-battles').value) || 0
-    };
+    const config = DeckConfig.getDeckConfig();
 
-    const nonPermanents = types.instant + types.sorcery;
-    const permanents = types.creature + types.artifact + types.enchantment +
-                      types.planeswalker + types.land + types.battle;
+    const nonPermanents = config.instants + config.sorceries;
+    const permanents = config.creatures + config.artifacts + config.enchantments +
+                      config.planeswalkers + config.lands + config.battles;
     const deckSize = nonPermanents + permanents;
-
-    document.getElementById('surge-deckSize').textContent = deckSize;
 
     return { deckSize, nonPermanents, permanents };
 }
@@ -257,18 +247,27 @@ function updateComparison(config, result) {
             const comparisonPanel = document.getElementById('surge-comparison-panel');
             const comparisonInsight = document.getElementById('surge-comparison-insight');
 
-            comparisonPanel.style.display = 'block';
-            comparisonInsight.innerHTML = `
-                <h3>Comparison at 10 Mana</h3>
-                <p>
-                    <strong>Primal Surge (10 mana):</strong> ${formatNumber(result.expectedPermanents)} expected permanents<br>
-                    <strong>Genesis Wave X=7 (10 mana):</strong> ${formatNumber(waveResult.expectedPermanents)} expected permanents<br><br>
-                    ${surgeBetter
-                        ? `<span class="marginal-positive">✓ Primal Surge is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
-                        : `<span class="marginal-negative">✗ Genesis Wave X=7 is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
-                    }
-                </p>
-            `;
+            if (comparisonPanel) {
+                comparisonPanel.style.display = 'block';
+            }
+            if (comparisonInsight) {
+                comparisonInsight.innerHTML = `
+                    <h3>Comparison at 10 Mana</h3>
+                    <p>
+                        <strong>Primal Surge (10 mana):</strong> ${formatNumber(result.expectedPermanents)} expected permanents<br>
+                        <strong>Genesis Wave X=7 (10 mana):</strong> ${formatNumber(waveResult.expectedPermanents)} expected permanents<br><br>
+                        ${surgeBetter
+                            ? `<span class="marginal-positive">✓ Primal Surge is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
+                            : `<span class="marginal-negative">✗ Genesis Wave X=7 is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
+                        }
+                    </p>
+                `;
+            }
+        } else {
+            const comparisonPanel = document.getElementById('surge-comparison-panel');
+            if (comparisonPanel) {
+                comparisonPanel.style.display = 'none';
+            }
         }
     });
 }
@@ -294,13 +293,3 @@ export function updateUI() {
  * Update deck inputs from imported data
  * @param {Object} typeCounts - Type counts from import
  */
-export function updateFromImport(typeCounts) {
-    document.getElementById('surge-creatures').value = typeCounts.creature;
-    document.getElementById('surge-instants').value = typeCounts.instant;
-    document.getElementById('surge-sorceries').value = typeCounts.sorcery;
-    document.getElementById('surge-artifacts').value = typeCounts.artifact;
-    document.getElementById('surge-enchantments').value = typeCounts.enchantment;
-    document.getElementById('surge-planeswalkers').value = typeCounts.planeswalker;
-    document.getElementById('surge-lands').value = typeCounts.land;
-    document.getElementById('surge-battles').value = typeCounts.battle;
-}

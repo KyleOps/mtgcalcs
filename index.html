@@ -19,9 +19,63 @@
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/ux-enhancements.css">
 </head>
 <body class="theme-portent">
     <div class="container">
+        <!-- SHARED DECK CONFIGURATION -->
+        <section class="panel collapsible-panel expanded" id="deck-config" aria-label="Deck configuration">
+            <div class="panel-header">
+                <h2>📚 Deck Configuration</h2>
+                <button class="collapse-btn" aria-label="Toggle section">
+                    <span class="collapse-icon">▼</span>
+                </button>
+            </div>
+
+            <div class="panel-content">
+                <div class="input-group">
+                    <label style="margin-bottom: 8px;">Cards by type in library</label>
+                    <div class="type-grid">
+                        <div class="type-input">
+                            <label for="deck-creatures">Creature</label>
+                            <input type="number" id="deck-creatures" value="25" min="0" aria-label="Creatures">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-instants">Instant</label>
+                            <input type="number" id="deck-instants" value="8" min="0" aria-label="Instants">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-sorceries">Sorcery</label>
+                            <input type="number" id="deck-sorceries" value="6" min="0" aria-label="Sorceries">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-artifacts">Artifact</label>
+                            <input type="number" id="deck-artifacts" value="4" min="0" aria-label="Artifacts">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-enchantments">Enchant</label>
+                            <input type="number" id="deck-enchantments" value="3" min="0" aria-label="Enchantments">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-planeswalkers">Planeswalker</label>
+                            <input type="number" id="deck-planeswalkers" value="2" min="0" aria-label="Planeswalkers">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-lands">Land</label>
+                            <input type="number" id="deck-lands" value="32" min="0" aria-label="Lands">
+                        </div>
+                        <div class="type-input">
+                            <label for="deck-battles">Battle</label>
+                            <input type="number" id="deck-battles" value="0" min="0" aria-label="Battles">
+                        </div>
+                    </div>
+                    <div class="deck-total">
+                        Total cards in library: <span id="deck-total">80</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Tab Navigation -->
         <nav class="tab-nav" role="navigation" aria-label="Calculator selection">
             <button class="tab-button portent active" data-tab="portent" aria-pressed="true">
@@ -40,100 +94,36 @@
             <h1>⚡ Portent of Calamity Calculator</h1>
             <p class="card-text">"A 9 mana draw 3, nice!"</p>
 
-            <div class="main-grid">
-                <div class="left-column">
-                    <section class="panel" aria-label="Deck configuration">
-                        <h2>📚 Deck Configuration</h2>
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Configuration">
+                    <h2>⚙️ Calculation Settings</h2>
+                    <div class="input-group">
+                        <label for="portent-xValue">X value (cards to reveal)</label>
+                        <div class="x-slider-row">
+                            <input type="range" id="portent-xSlider" value="5" min="1" max="20" step="1" aria-label="X value slider">
+                            <input type="number" id="portent-xValue" value="5" min="1" max="50" class="x-number" aria-label="X value number input">
+                        </div>
+                    </div>
+                </section>
 
-                        <div class="import-section">
-                            <div class="input-group">
-                                <label for="portent-moxfieldUrl">Import from Moxfield</label>
-                                <div class="import-row">
-                                    <input type="text" id="portent-moxfieldUrl" placeholder="https://moxfield.com/decks/..." aria-describedby="portent-cors-note">
-                                    <button class="import-btn" id="portent-importBtn">Import</button>
-                                </div>
-                                <div class="import-status" id="portent-importStatus" role="status" aria-live="polite"></div>
-                                <div class="deck-name" id="portent-deckInfo" style="display: none;">
-                                    <span class="label">Imported deck:</span>
-                                    <span id="portent-deckName"></span>
-                                </div>
-                                <p class="cors-note" id="portent-cors-note">
-                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
-                                </p>
-                            </div>
-                        </div>
+                <section class="panel" aria-label="Probability chart">
+                    <h2>📈 Probability & Expected Cards vs X Value</h2>
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="portent-combinedChart" role="img" aria-label="Portent probability chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> P(Free Spell) %</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> Expected Cards to Hand</span>
+                    </div>
+                </section>
 
-                        <div class="input-group">
-                            <label for="portent-xValue">X value (cards to reveal)</label>
-                            <div class="x-slider-row">
-                                <input type="range" id="portent-xSlider" value="5" min="1" max="20" step="1" aria-label="X value slider">
-                                <input type="number" id="portent-xValue" value="5" min="1" max="50" class="x-number" aria-label="X value number input">
-                            </div>
-                        </div>
-
-                        <div class="input-group" style="margin-top: 16px;">
-                            <label style="margin-bottom: 8px;">Cards by type in library</label>
-                            <div class="type-grid">
-                                <div class="type-input">
-                                    <label for="portent-creatures">Creature</label>
-                                    <input type="number" id="portent-creatures" value="25" min="0" aria-label="Creatures">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-instants">Instant</label>
-                                    <input type="number" id="portent-instants" value="8" min="0" aria-label="Instants">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-sorceries">Sorcery</label>
-                                    <input type="number" id="portent-sorceries" value="6" min="0" aria-label="Sorceries">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-artifacts">Artifact</label>
-                                    <input type="number" id="portent-artifacts" value="4" min="0" aria-label="Artifacts">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-enchantments">Enchant</label>
-                                    <input type="number" id="portent-enchantments" value="3" min="0" aria-label="Enchantments">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-planeswalkers">Planeswalker</label>
-                                    <input type="number" id="portent-planeswalkers" value="2" min="0" aria-label="Planeswalkers">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-lands">Land</label>
-                                    <input type="number" id="portent-lands" value="32" min="0" aria-label="Lands">
-                                </div>
-                                <div class="type-input">
-                                    <label for="portent-battles">Battle</label>
-                                    <input type="number" id="portent-battles" value="0" min="0" aria-label="Battles">
-                                </div>
-                            </div>
-                            <div class="deck-total">
-                                Total cards in library: <span id="portent-deckSize">80</span>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="right-column">
-                    <section class="panel" aria-label="Probability chart">
-                        <h2>📈 Probability & Expected Cards vs X Value</h2>
-                        <div class="chart-container" style="height: 320px;">
-                            <canvas id="portent-combinedChart" role="img" aria-label="Portent probability chart"></canvas>
-                        </div>
-                        <div class="chart-legend">
-                            <span class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> P(Free Spell) %</span>
-                            <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> Expected Cards to Hand</span>
-                        </div>
-                    </section>
-
-                    <section class="panel" aria-label="X value comparison">
-                        <h2>🔍 X Value Comparison</h2>
-                        <div class="table-wrapper">
-                            <table class="comparison-table" id="portent-comparisonTable">
-                            </table>
-                        </div>
-                    </section>
-                </div>
+                <section class="panel" aria-label="X value comparison">
+                    <h2>🔍 X Value Comparison</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="portent-comparisonTable">
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -142,98 +132,25 @@
             <h1>🌿 Primal Surge Calculator</h1>
             <p class="card-text">"So do you win here or...?"</p>
 
-            <div class="main-grid">
-                <div class="left-column">
-                    <section class="panel" aria-label="Deck configuration">
-                        <h2>📚 Deck Configuration</h2>
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Expected permanents chart">
+                    <h2>📈 Expected Permanents & Deck Percentage</h2>
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="surge-chart" role="img" aria-label="Primal Surge chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #4ade80;"></span> Expected Permanents</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> % of Deck Played</span>
+                    </div>
+                </section>
 
-                        <div class="import-section">
-                            <div class="input-group">
-                                <label for="surge-moxfieldUrl">Import from Moxfield</label>
-                                <div class="import-row">
-                                    <input type="text" id="surge-moxfieldUrl" placeholder="https://moxfield.com/decks/...">
-                                    <button class="import-btn" id="surge-importBtn">Import</button>
-                                </div>
-                                <div class="import-status" id="surge-importStatus" role="status" aria-live="polite"></div>
-                                <div class="deck-name" id="surge-deckInfo" style="display: none;">
-                                    <span class="label">Imported deck:</span>
-                                    <span id="surge-deckName"></span>
-                                </div>
-                                <p class="cors-note">
-                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="input-group" style="margin-top: 16px;">
-                            <label style="margin-bottom: 8px;">Cards by type in library</label>
-                            <div class="type-grid">
-                                <div class="type-input">
-                                    <label for="surge-creatures">Creature</label>
-                                    <input type="number" id="surge-creatures" value="40" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-instants">Instant</label>
-                                    <input type="number" id="surge-instants" value="1" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-sorceries">Sorcery</label>
-                                    <input type="number" id="surge-sorceries" value="0" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-artifacts">Artifact</label>
-                                    <input type="number" id="surge-artifacts" value="8" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-enchantments">Enchant</label>
-                                    <input type="number" id="surge-enchantments" value="6" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-planeswalkers">Planeswalker</label>
-                                    <input type="number" id="surge-planeswalkers" value="2" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-lands">Land</label>
-                                    <input type="number" id="surge-lands" value="32" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="surge-battles">Battle</label>
-                                    <input type="number" id="surge-battles" value="0" min="0">
-                                </div>
-                            </div>
-                            <div class="deck-total">
-                                Total cards in library: <span id="surge-deckSize">89</span>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="right-column">
-                    <section class="panel" aria-label="Expected permanents chart">
-                        <h2>📈 Expected Permanents & Deck Percentage</h2>
-                        <div class="chart-container" style="height: 320px;">
-                            <canvas id="surge-chart" role="img" aria-label="Primal Surge chart"></canvas>
-                        </div>
-                        <div class="chart-legend">
-                            <span class="legend-item"><span class="legend-color" style="background: #4ade80;"></span> Expected Permanents</span>
-                            <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> % of Deck Played</span>
-                        </div>
-                    </section>
-
-                    <section class="panel" aria-label="Simulation results">
-                        <h2>🔍 Simulation Results</h2>
-                        <div class="table-wrapper">
-                            <table class="comparison-table" id="surge-statsTable">
-                            </table>
-                        </div>
-                    </section>
-
-                    <section class="panel" id="surge-comparison-panel" style="display: none;" aria-label="Comparison">
-                        <h2>⚖️ Primal Surge vs Genesis Wave</h2>
-                        <div class="insight-box" id="surge-comparison-insight">
-                        </div>
-                    </section>
-                </div>
+                <section class="panel" aria-label="Simulation results">
+                    <h2>🔍 Simulation Results</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="surge-statsTable">
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -242,106 +159,36 @@
             <h1>🌊 Genesis Wave Calculator</h1>
             <p class="card-text">"You may put any number of permanent cards with mana value X or less from among them onto the battlefield"</p>
 
-            <div class="main-grid">
-                <div class="left-column">
-                    <section class="panel" aria-label="Deck configuration">
-                        <h2>📚 Deck Configuration</h2>
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Configuration">
+                    <h2>⚙️ Calculation Settings</h2>
+                    <div class="input-group">
+                        <label for="wave-xValue">X value (cards to reveal)</label>
+                        <div class="x-slider-row">
+                            <input type="range" id="wave-xSlider" value="10" min="1" max="30" step="1">
+                            <input type="number" id="wave-xValue" value="10" min="1" max="50" class="x-number">
+                        </div>
+                    </div>
+                </section>
 
-                        <div class="import-section">
-                            <div class="input-group">
-                                <label for="wave-moxfieldUrl">Import from Moxfield</label>
-                                <div class="import-row">
-                                    <input type="text" id="wave-moxfieldUrl" placeholder="https://moxfield.com/decks/...">
-                                    <button class="import-btn" id="wave-importBtn">Import</button>
-                                </div>
-                                <div class="import-status" id="wave-importStatus" role="status" aria-live="polite"></div>
-                                <div class="deck-name" id="wave-deckInfo" style="display: none;">
-                                    <span class="label">Imported deck:</span>
-                                    <span id="wave-deckName"></span>
-                                </div>
-                                <p class="cors-note">
-                                    Paste a Moxfield URL or deck ID (e.g., <code>oEWXWHM5eEGMmopExLWRCA</code>)
-                                </p>
-                            </div>
-                        </div>
+                <section class="panel" aria-label="Expected permanents chart">
+                    <h2>📈 Expected Permanents vs X Value</h2>
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="wave-chart" role="img" aria-label="Genesis Wave chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> Expected Permanents Played</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Total Cards Revealed</span>
+                    </div>
+                </section>
 
-                        <div class="input-group">
-                            <label for="wave-xValue">X value (cards to reveal)</label>
-                            <div class="x-slider-row">
-                                <input type="range" id="wave-xSlider" value="10" min="1" max="30" step="1">
-                                <input type="number" id="wave-xValue" value="10" min="1" max="50" class="x-number">
-                            </div>
-                        </div>
-
-                        <div class="input-group" style="margin-top: 16px;">
-                            <label style="margin-bottom: 8px;">Permanents by CMC in library</label>
-                            <div class="type-grid">
-                                <div class="type-input">
-                                    <label for="wave-cmc0">CMC 0-1</label>
-                                    <input type="number" id="wave-cmc0" value="15" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-cmc2">CMC 2</label>
-                                    <input type="number" id="wave-cmc2" value="12" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-cmc3">CMC 3</label>
-                                    <input type="number" id="wave-cmc3" value="10" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-cmc4">CMC 4</label>
-                                    <input type="number" id="wave-cmc4" value="8" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-cmc5">CMC 5</label>
-                                    <input type="number" id="wave-cmc5" value="6" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-cmc6">CMC 6+</label>
-                                    <input type="number" id="wave-cmc6" value="4" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-lands">Lands</label>
-                                    <input type="number" id="wave-lands" value="32" min="0">
-                                </div>
-                                <div class="type-input">
-                                    <label for="wave-nonperm">Non-Perm</label>
-                                    <input type="number" id="wave-nonperm" value="12" min="0">
-                                </div>
-                            </div>
-                            <div class="deck-total">
-                                Total cards in library: <span id="wave-deckSize">99</span>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="right-column">
-                    <section class="panel" aria-label="Expected permanents chart">
-                        <h2>📈 Expected Permanents vs X Value</h2>
-                        <div class="chart-container" style="height: 320px;">
-                            <canvas id="wave-chart" role="img" aria-label="Genesis Wave chart"></canvas>
-                        </div>
-                        <div class="chart-legend">
-                            <span class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> Expected Permanents Played</span>
-                            <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Total Cards Revealed</span>
-                        </div>
-                    </section>
-
-                    <section class="panel" aria-label="X value comparison">
-                        <h2>🔍 X Value Comparison</h2>
-                        <div class="table-wrapper">
-                            <table class="comparison-table" id="wave-comparisonTable">
-                            </table>
-                        </div>
-                    </section>
-
-                    <section class="panel" id="wave-comparison-panel" style="display: none;" aria-label="Comparison">
-                        <h2>⚖️ Genesis Wave vs Primal Surge</h2>
-                        <div class="insight-box" id="wave-comparison-insight">
-                        </div>
-                    </section>
-                </div>
+                <section class="panel" aria-label="X value comparison">
+                    <h2>🔍 X Value Comparison</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="wave-comparisonTable">
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
     </div>

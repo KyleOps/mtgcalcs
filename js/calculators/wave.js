@@ -4,6 +4,7 @@
  */
 
 import { createCache, partialShuffle, formatNumber, formatPercentage } from '../utils/simulation.js';
+import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
     ITERATIONS: 20000,
@@ -71,19 +72,26 @@ export function simulateGenesisWave(deckSize, cmcCounts, x) {
 }
 
 /**
- * Get current deck configuration from DOM
+ * Get current deck configuration from shared config
  * @returns {Object} - Deck configuration
+ *
+ * Note: Wave uses card type counts from shared config to estimate CMC distribution
+ * For now, we'll use the shared type-based config and convert to CMC buckets
  */
 export function getDeckConfig() {
+    const config = DeckConfig.getDeckConfig();
+
+    // For Wave, we'll use a simple mapping from card types to CMC buckets
+    // This is a rough estimate - in reality users should configure CMC separately
     const cmcCounts = {
-        cmc0: parseInt(document.getElementById('wave-cmc0').value) || 0,
-        cmc2: parseInt(document.getElementById('wave-cmc2').value) || 0,
-        cmc3: parseInt(document.getElementById('wave-cmc3').value) || 0,
-        cmc4: parseInt(document.getElementById('wave-cmc4').value) || 0,
-        cmc5: parseInt(document.getElementById('wave-cmc5').value) || 0,
-        cmc6: parseInt(document.getElementById('wave-cmc6').value) || 0,
-        lands: parseInt(document.getElementById('wave-lands').value) || 0,
-        nonperm: parseInt(document.getElementById('wave-nonperm').value) || 0
+        cmc0: config.lands, // Lands are CMC 0
+        cmc2: config.creatures, // Estimate creatures at CMC 2-4
+        cmc3: config.instants + config.sorceries, // Spells at CMC 3
+        cmc4: config.artifacts + config.enchantments, // Artifacts/enchantments at CMC 4
+        cmc5: config.planeswalkers, // Planeswalkers at CMC 5+
+        cmc6: config.battles, // Battles at CMC 6+
+        lands: config.lands,
+        nonperm: config.instants + config.sorceries
     };
 
     const deckSize = Object.values(cmcCounts).reduce((sum, count) => sum + count, 0);
@@ -95,10 +103,10 @@ export function getDeckConfig() {
         lastDeckHash = newHash;
     }
 
-    document.getElementById('wave-deckSize').textContent = deckSize;
-
     const xSlider = document.getElementById('wave-xSlider');
-    xSlider.max = Math.min(deckSize, 30);
+    if (xSlider) {
+        xSlider.max = Math.min(deckSize, 30);
+    }
 
     return {
         deckSize,
@@ -292,21 +300,28 @@ function updateComparison(config, results) {
             const difference = Math.abs(waveResult.expectedPermanents - surgeResult.expectedPermanents);
             const percentDiff = ((difference / surgeResult.expectedPermanents) * 100).toFixed(1);
 
-            comparisonPanel.style.display = 'block';
-            comparisonInsight.innerHTML = `
-                <h3>Comparison at 10 Mana</h3>
-                <p>
-                    <strong>Genesis Wave X=${config.x} (${config.x + 3} mana):</strong> ${formatNumber(waveResult.expectedPermanents)} expected permanents<br>
-                    <strong>Primal Surge (10 mana):</strong> ${formatNumber(surgeResult.expectedPermanents)} expected permanents<br><br>
-                    ${waveBetter
-                        ? `<span class="marginal-positive">✓ Genesis Wave X=${config.x} is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
-                        : `<span class="marginal-negative">✗ Primal Surge is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
-                    }
-                </p>
-            `;
+            if (comparisonPanel) {
+                comparisonPanel.style.display = 'block';
+            }
+            if (comparisonInsight) {
+                comparisonInsight.innerHTML = `
+                    <h3>Comparison at 10 Mana</h3>
+                    <p>
+                        <strong>Genesis Wave X=${config.x} (${config.x + 3} mana):</strong> ${formatNumber(waveResult.expectedPermanents)} expected permanents<br>
+                        <strong>Primal Surge (10 mana):</strong> ${formatNumber(surgeResult.expectedPermanents)} expected permanents<br><br>
+                        ${waveBetter
+                            ? `<span class="marginal-positive">✓ Genesis Wave X=${config.x} is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
+                            : `<span class="marginal-negative">✗ Primal Surge is better by ${formatNumber(difference)} permanents (${percentDiff}% more)</span>`
+                        }
+                    </p>
+                `;
+            }
         });
     } else {
-        comparisonPanel.style.display = 'none';
+        const comparisonPanel = document.getElementById('wave-comparison-panel');
+        if (comparisonPanel) {
+            comparisonPanel.style.display = 'none';
+        }
     }
 }
 
@@ -331,13 +346,3 @@ export function updateUI() {
  * Update deck inputs from imported data
  * @param {Object} cmcCounts - CMC counts from import
  */
-export function updateFromImport(cmcCounts) {
-    document.getElementById('wave-cmc0').value = cmcCounts.cmc0;
-    document.getElementById('wave-cmc2').value = cmcCounts.cmc2;
-    document.getElementById('wave-cmc3').value = cmcCounts.cmc3;
-    document.getElementById('wave-cmc4').value = cmcCounts.cmc4;
-    document.getElementById('wave-cmc5').value = cmcCounts.cmc5;
-    document.getElementById('wave-cmc6').value = cmcCounts.cmc6;
-    document.getElementById('wave-lands').value = cmcCounts.lands;
-    document.getElementById('wave-nonperm').value = cmcCounts.nonperm;
-}

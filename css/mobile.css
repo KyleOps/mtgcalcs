@@ -2,17 +2,32 @@
 
 /* Tablet and below */
 @media (max-width: 900px) {
+    .container {
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
     .main-grid {
         grid-template-columns: 1fr;
         gap: var(--spacing-lg);
+        width: 100%;
     }
 
     .panel {
         padding: var(--spacing-lg);
+        width: 100%;
+        box-sizing: border-box;
     }
 
     h1 {
         font-size: 1.5rem;
+    }
+
+    /* Prevent overflow on charts and tables */
+    .chart-container,
+    .table-wrapper {
+        max-width: 100%;
+        overflow-x: auto;
     }
 }
 

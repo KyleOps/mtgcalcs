@@ -82,6 +82,7 @@ html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-y: scroll; /* Force scrollbar gutter to prevent layout shift */
 }
 
 body {
@@ -174,12 +175,17 @@ h2 {
     max-width: 1200px;
     margin: 0 auto;
     width: 100%;
+    overflow-x: hidden;
 }
 
 .main-grid {
     display: grid;
     grid-template-columns: 350px 1fr;
     gap: var(--spacing-2xl);
+}
+
+.main-grid.single-column {
+    grid-template-columns: 1fr;
 }
 
 /* ==================== TAB CONTENT ==================== */
