@@ -35,15 +35,18 @@
 @media (max-width: 640px) {
     body {
         padding: var(--spacing-md);
+        font-size: 16px; /* Prevent iOS zoom on input focus */
     }
 
     h1 {
         font-size: 1.25rem;
         letter-spacing: 1px;
+        margin-bottom: var(--spacing-md);
     }
 
     h2 {
         font-size: 1rem;
+        margin-bottom: var(--spacing-md);
     }
 
     .card-text {
@@ -54,17 +57,22 @@
     .tab-nav {
         gap: var(--spacing-sm);
         margin-bottom: var(--spacing-lg);
+        padding: var(--spacing-xs);
     }
 
     .tab-button {
-        padding: 10px var(--spacing-lg);
-        font-size: 0.9rem;
+        padding: 12px var(--spacing-md);
+        font-size: 0.85rem;
         letter-spacing: 0.5px;
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
     }
 
     .panel {
         padding: var(--spacing-md);
         margin-bottom: var(--spacing-lg);
+        border-radius: var(--radius-lg);
     }
 
     /* Make inputs more touch-friendly */
@@ -72,6 +80,18 @@
     .type-input input,
     .import-btn {
         min-height: 44px; /* iOS recommended touch target */
+        font-size: 16px; /* Prevent iOS zoom */
+    }
+
+    .input-group input[type="number"],
+    .type-input input[type="number"] {
+        -moz-appearance: textfield;
+    }
+
+    .input-group input[type="number"]::-webkit-outer-spin-button,
+    .input-group input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
     }
 
     .type-grid {
@@ -102,35 +122,76 @@
 
     /* Adjust chart containers for mobile */
     .chart-container {
-        height: 240px;
+        height: 260px;
+        margin-bottom: var(--spacing-md);
+        position: relative;
+    }
+
+    .chart-container canvas {
+        max-width: 100%;
+        height: auto !important;
     }
 
     .chart-legend {
         gap: var(--spacing-md);
         font-size: 0.8rem;
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
     .legend-item {
         gap: var(--spacing-xs);
+        font-size: 0.75rem;
+    }
+
+    .legend-color {
+        width: 10px;
+        height: 10px;
+        flex-shrink: 0;
     }
 
     /* Table scrolling for mobile */
+    .table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 calc(var(--spacing-md) * -1);
+        padding: 0 var(--spacing-md);
+    }
+
     .comparison-table {
         font-size: 0.8rem;
+        min-width: 100%;
     }
 
     .comparison-table th,
     .comparison-table td {
         padding: var(--spacing-sm);
         white-space: nowrap;
+        min-width: 60px;
+    }
+
+    .comparison-table th:first-child,
+    .comparison-table td:first-child {
+        position: sticky;
+        left: 0;
+        background: var(--panel-bg);
+        z-index: 1;
     }
 }
 
 /* Small mobile */
 @media (max-width: 375px) {
+    body {
+        padding: var(--spacing-sm);
+    }
+
     .tab-button {
-        font-size: 0.8rem;
-        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.75rem;
+        padding: 10px var(--spacing-sm);
+    }
+
+    .panel {
+        padding: var(--spacing-sm);
     }
 
     .type-input {
@@ -148,11 +209,25 @@
 
     .comparison-table {
         font-size: 0.75rem;
+        min-width: 450px;
     }
 
     .comparison-table th,
     .comparison-table td {
-        padding: 6px;
+        padding: 6px 4px;
+        min-width: 50px;
+    }
+
+    .chart-container {
+        height: 220px;
+    }
+
+    h1 {
+        font-size: 1.1rem;
+    }
+
+    .card-text {
+        font-size: 0.8rem;
     }
 }
 
@@ -251,9 +326,25 @@
         min-width: 44px;
     }
 
+    /* Better slider thumb for touch */
+    .x-slider-row input[type="range"]::-webkit-slider-thumb {
+        width: 28px;
+        height: 28px;
+    }
+
+    .x-slider-row input[type="range"]::-moz-range-thumb {
+        width: 28px;
+        height: 28px;
+    }
+
     /* Remove hover effects on touch devices */
     .tab-button:hover,
     .import-btn:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .x-slider-row input[type="range"]::-webkit-slider-thumb:hover {
         transform: none;
     }
 
@@ -261,15 +352,25 @@
     .tab-button:active,
     .import-btn:active {
         opacity: 0.8;
+        transform: scale(0.98);
     }
 
     /* Prevent text selection on UI elements */
     .tab-button,
     .import-btn,
     .panel h2,
-    .legend-item {
+    .legend-item,
+    .collapse-btn {
         -webkit-user-select: none;
         user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Smooth scrolling for touch */
+    .table-wrapper,
+    .chart-container {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
     }
 }
 

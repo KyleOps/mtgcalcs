@@ -6,6 +6,7 @@
     gap: var(--spacing-lg);
     margin-bottom: var(--spacing-2xl);
     flex-wrap: wrap;
+    width: 100%;
 }
 
 .tab-button {
@@ -20,6 +21,9 @@
     letter-spacing: 1px;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tab-button.portent {
@@ -74,6 +78,9 @@
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     transition: border var(--transition-slow), box-shadow var(--transition-slow);
     margin-bottom: var(--spacing-2xl);
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .theme-portent .panel {
@@ -246,6 +253,7 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
+    width: 100%;
 }
 
 .x-slider-row input[type="range"] {
@@ -256,6 +264,8 @@
     border-radius: var(--radius-sm);
     outline: none;
     transition: background var(--transition-slow);
+    cursor: pointer;
+    min-width: 0;
 }
 
 .theme-portent .x-slider-row input[type="range"] {
@@ -320,9 +330,25 @@
 }
 
 .x-number {
-    width: 60px !important;
+    width: 70px !important;
+    min-width: 70px;
+    max-width: 70px;
     text-align: center;
     flex-shrink: 0;
+}
+
+/* Mobile optimization for X slider */
+@media (max-width: 640px) {
+    .x-slider-row {
+        gap: var(--spacing-sm);
+    }
+
+    .x-number {
+        width: 60px !important;
+        min-width: 60px;
+        max-width: 60px;
+        padding: 10px 4px;
+    }
 }
 
 /* ==================== IMPORT SECTION ==================== */
@@ -549,6 +575,8 @@
 .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md);
+    max-width: 100%;
 }
 
 .comparison-table {
@@ -556,12 +584,14 @@
     border-collapse: collapse;
     margin-top: var(--spacing-md);
     font-size: 0.9rem;
+    min-width: 500px;
 }
 
 .comparison-table th,
 .comparison-table td {
     padding: var(--spacing-sm) var(--spacing-md);
     text-align: center;
+    vertical-align: middle;
 }
 
 .theme-portent .comparison-table th,
