@@ -5,29 +5,29 @@
 
 import { importDecklistBatch } from './decklistImport.js';
 
-// Global deck state
+// Global deck state (99-card Commander deck)
 let deckState = {
     // Card types
-    creatures: 25,
-    instants: 8,
-    sorceries: 6,
-    artifacts: 4,
-    enchantments: 3,
+    creatures: 30,
+    instants: 10,
+    sorceries: 8,
+    artifacts: 8,
+    enchantments: 5,
     planeswalkers: 2,
-    lands: 32,
+    lands: 36,
     battles: 0,
 
     // CMC breakdown (for Wave and Vortex calculators)
-    cmc0: 15,
-    cmc1: 0,
-    cmc2: 12,
-    cmc3: 10,
-    cmc4: 8,
-    cmc5: 6,
-    cmc6: 4,
+    cmc0: 10,
+    cmc1: 12,
+    cmc2: 15,
+    cmc3: 18,
+    cmc4: 14,
+    cmc5: 10,
+    cmc6: 8,
 
     // Vortex-specific
-    creaturesPower5Plus: 10,
+    creaturesPower5Plus: 12,
 
     // Card-level data (new format for Vortex)
     cardDetails: [],

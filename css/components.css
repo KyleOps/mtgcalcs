@@ -516,6 +516,16 @@
     box-shadow: 0 4px 12px var(--wave-accent);
 }
 
+.theme-vortex .import-btn {
+    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+    border: 1px solid rgba(249, 115, 22, 0.5);
+}
+
+.theme-vortex .import-btn:hover {
+    background: linear-gradient(135deg, var(--vortex-primary) 0%, #ea580c 100%);
+    box-shadow: 0 4px 12px var(--vortex-accent);
+}
+
 .import-btn:hover {
     transform: translateY(-1px);
 }
