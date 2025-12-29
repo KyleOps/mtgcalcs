@@ -28,6 +28,15 @@
     --wave-bg-end: #0a1012;
     --wave-border: rgba(14, 165, 233, 0.3);
 
+    /* Theme colors - Vortex (Orange/Red) */
+    --vortex-primary: #f97316;
+    --vortex-secondary: #fb923c;
+    --vortex-accent: rgba(249, 115, 22, 0.5);
+    --vortex-bg-start: #120a0a;
+    --vortex-bg-mid: #2e1a1a;
+    --vortex-bg-end: #120a0a;
+    --vortex-border: rgba(249, 115, 22, 0.3);
+
     /* Base colors */
     --text-primary: #c4b8b8;
     --text-secondary: #a09090;
@@ -38,6 +47,7 @@
     /* UI colors */
     --danger: #dc2626;
     --panel-bg: linear-gradient(145deg, rgba(20, 15, 25, 0.9) 0%, rgba(15, 10, 15, 0.95) 100%);
+    --panel-bg-alt: rgba(0, 0, 0, 0.3);
     --input-bg: rgba(0, 0, 0, 0.4);
     --overlay-bg: rgba(0, 0, 0, 0.3);
 
@@ -83,12 +93,14 @@ html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-y: scroll; /* Force scrollbar gutter to prevent layout shift */
+    scroll-behavior: smooth;
 }
 
 body {
     font-family: var(--font-body);
     min-height: 100vh;
     color: var(--text-primary);
+    --accent: var(--portent-primary);
     padding: var(--spacing-xl);
     transition: background var(--transition-slow);
     overflow-x: hidden;
@@ -98,14 +110,22 @@ body {
 
 body.theme-portent {
     background: linear-gradient(135deg, var(--portent-bg-start) 0%, var(--portent-bg-mid) 40%, var(--portent-bg-end) 100%);
+    --accent: var(--portent-primary);
 }
 
 body.theme-surge {
     background: linear-gradient(135deg, var(--surge-bg-start) 0%, var(--surge-bg-mid) 40%, var(--surge-bg-end) 100%);
+    --accent: var(--surge-primary);
 }
 
 body.theme-wave {
     background: linear-gradient(135deg, var(--wave-bg-start) 0%, var(--wave-bg-mid) 40%, var(--wave-bg-end) 100%);
+    --accent: var(--wave-primary);
+}
+
+body.theme-vortex {
+    background: linear-gradient(135deg, var(--vortex-bg-start) 0%, var(--vortex-bg-mid) 40%, var(--vortex-bg-end) 100%);
+    --accent: var(--vortex-primary);
 }
 
 /* ==================== TYPOGRAPHY ==================== */

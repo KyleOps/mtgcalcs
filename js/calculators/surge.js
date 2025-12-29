@@ -3,13 +3,15 @@
  * Simulates permanents played with Primal Surge
  */
 
-import { formatNumber, formatPercentage } from '../utils/simulation.js';
+import { formatNumber, formatPercentage, createCache } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
     ITERATIONS: 15000
 };
 
+let simulationCache = createCache(50);
+let lastDeckHash = '';
 let chart = null;
 
 /**
@@ -20,6 +22,11 @@ let chart = null;
  * @returns {Object} - Simulation results
  */
 export function simulatePrimalSurge(deckSize, nonPermanents, permanents) {
+    // Check cache first
+    const cacheKey = `${deckSize}-${nonPermanents}`;
+    const cached = simulationCache.get(cacheKey);
+    if (cached) return cached;
+
     let totalPermanents = 0;
 
     // Build deck: 0 = permanent, 1 = non-permanent
@@ -50,10 +57,14 @@ export function simulatePrimalSurge(deckSize, nonPermanents, permanents) {
         totalPermanents += count;
     }
 
-    return {
+    const result = {
         expectedPermanents: totalPermanents / CONFIG.ITERATIONS,
         percentOfDeck: (totalPermanents / CONFIG.ITERATIONS / deckSize) * 100
     };
+
+    // Cache the result
+    simulationCache.set(cacheKey, result);
+    return result;
 }
 
 /**
@@ -67,6 +78,13 @@ export function getDeckConfig() {
     const permanents = config.creatures + config.artifacts + config.enchantments +
                       config.planeswalkers + config.lands + config.battles;
     const deckSize = nonPermanents + permanents;
+
+    // Clear cache if deck changed
+    const newHash = `${deckSize}-${nonPermanents}-${permanents}`;
+    if (newHash !== lastDeckHash) {
+        simulationCache.clear();
+        lastDeckHash = newHash;
+    }
 
     return { deckSize, nonPermanents, permanents };
 }

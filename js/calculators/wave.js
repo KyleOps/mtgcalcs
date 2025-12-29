@@ -17,6 +17,15 @@ let lastDeckHash = '';
 let chart = null;
 
 /**
+ * Create a simple hash for cmcCounts object (faster than JSON.stringify)
+ * @param {Object} cmc - CMC counts object
+ * @returns {string} - Hash string
+ */
+function hashCMC(cmc) {
+    return `${cmc.cmc0}-${cmc.cmc2}-${cmc.cmc3}-${cmc.cmc4}-${cmc.cmc5}-${cmc.cmc6}-${cmc.lands}-${cmc.nonperm}`;
+}
+
+/**
  * Simulate Genesis Wave
  * @param {number} deckSize - Total cards in library
  * @param {Object} cmcCounts - Card counts by CMC bracket
@@ -24,7 +33,7 @@ let chart = null;
  * @returns {Object} - Simulation results
  */
 export function simulateGenesisWave(deckSize, cmcCounts, x) {
-    const cacheKey = `${deckSize}-${x}-${JSON.stringify(cmcCounts)}`;
+    const cacheKey = `${deckSize}-${x}-${hashCMC(cmcCounts)}`;
     const cached = simulationCache.get(cacheKey);
     if (cached) return cached;
 
@@ -96,8 +105,8 @@ export function getDeckConfig() {
 
     const deckSize = Object.values(cmcCounts).reduce((sum, count) => sum + count, 0);
 
-    // Clear cache if deck changed
-    const newHash = JSON.stringify(cmcCounts);
+    // Clear cache if deck changed (use hash instead of JSON.stringify for performance)
+    const newHash = hashCMC(cmcCounts);
     if (newHash !== lastDeckHash) {
         simulationCache.clear();
         lastDeckHash = newHash;

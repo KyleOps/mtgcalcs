@@ -33,6 +33,22 @@
             </div>
 
             <div class="panel-content">
+                <div class="input-group import-section">
+                    <label for="decklist-input">Import Decklist (paste text)</label>
+                    <textarea
+                        id="decklist-input"
+                        placeholder="Paste your decklist here...&#10;Format: 4 Lightning Bolt&#10;1 Jace, the Mind Sculptor&#10;etc.. Or export>plain text from your deck builder."
+                        rows="4"
+                        aria-label="Decklist input"></textarea>
+                    <button id="import-btn" class="import-btn" aria-label="Import decklist">
+                        🔍 Import & Analyze
+                    </button>
+                    <div class="import-progress" id="import-progress">
+                        <div class="import-progress-bar" id="import-progress-bar"></div>
+                    </div>
+                    <div id="import-status" class="import-status" role="status" aria-live="polite"></div>
+                </div>
+
                 <div class="input-group">
                     <label style="margin-bottom: 8px;">Cards by type in library</label>
                     <div class="type-grid">
@@ -86,6 +102,9 @@
             </button>
             <button class="tab-button wave" data-tab="wave" aria-pressed="false">
                 🌊 Genesis Wave
+            </button>
+            <button class="tab-button vortex" data-tab="vortex" aria-pressed="false">
+                🌀 Monstrous Vortex
             </button>
         </nav>
 
@@ -157,7 +176,7 @@
         <!-- GENESIS WAVE TAB -->
         <div id="wave-tab" class="tab-content" role="tabpanel" aria-labelledby="wave">
             <h1>🌊 Genesis Wave Calculator</h1>
-            <p class="card-text">"You may put any number of permanent cards with mana value X or less from among them onto the battlefield"</p>
+            <p class="card-text">"Best green mill spell in the game"</p>
 
             <div class="main-grid single-column">
                 <section class="panel" aria-label="Configuration">
@@ -186,6 +205,58 @@
                     <h2>🔍 X Value Comparison</h2>
                     <div class="table-wrapper">
                         <table class="comparison-table" id="wave-comparisonTable">
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- VORTEX TAB -->
+        <div id="vortex-tab" class="tab-content" role="tabpanel" aria-labelledby="vortex">
+            <h1>🌀 Monstrous Vortex Calculator</h1>
+            <p class="card-text">"Big Creature, Big Value"</p>
+
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Import required notice">
+                    <h2>⚠️ Import Required</h2>
+                    <p style="color: var(--text-secondary); margin: 0;">
+                        This calculator requires decklist import to work. Please use the
+                        <strong style="color: var(--text-light);">📚 Deck Configuration</strong> panel above to import your decklist.
+                        The import will automatically detect creatures with power 5+ and CMC distribution.
+                    </p>
+                </section>
+
+                <section class="panel" aria-label="Configuration">
+                    <h2>⚙️ Calculation Settings</h2>
+                    <div class="input-group">
+                        <label for="vortex-cmcValue">CMC of power 5+ creature being cast</label>
+                        <div class="x-slider-row">
+                            <input type="range" id="vortex-cmcSlider" value="6" min="3" max="10" step="1" aria-label="Creature CMC slider">
+                            <input type="number" id="vortex-cmcValue" value="6" min="3" max="15" class="x-number" aria-label="Creature CMC number input">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Discover analysis">
+                    <div id="vortex-stats"></div>
+                </section>
+
+                <section class="panel" aria-label="Expected spells chart">
+                    <h2>📈 Discover Value by Creature CMC</h2>
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="vortex-chart" role="img" aria-label="Vortex discover chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #f97316;"></span> Avg Free Mana Value</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Avg Spell CMC Found</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> Avg Spells Cast</span>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Creature comparison">
+                    <h2>🔍 CMC Comparison</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="vortex-comparisonTable">
                         </table>
                     </div>
                 </section>

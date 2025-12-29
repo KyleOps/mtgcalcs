@@ -57,7 +57,7 @@
     .tab-nav {
         gap: var(--spacing-sm);
         margin-bottom: var(--spacing-lg);
-        padding: var(--spacing-xs);
+        padding: 0;
     }
 
     .tab-button {
@@ -77,10 +77,15 @@
 
     /* Make inputs more touch-friendly */
     .input-group input,
+    .input-group textarea,
     .type-input input,
     .import-btn {
         min-height: 44px; /* iOS recommended touch target */
         font-size: 16px; /* Prevent iOS zoom */
+    }
+
+    .input-group textarea {
+        min-height: 100px;
     }
 
     .input-group input[type="number"],

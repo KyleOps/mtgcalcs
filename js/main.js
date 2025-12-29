@@ -6,6 +6,7 @@
 import * as Portent from './calculators/portent.js';
 import * as Surge from './calculators/surge.js';
 import * as Wave from './calculators/wave.js';
+import * as Vortex from './calculators/vortex.js';
 import { debounce } from './utils/simulation.js';
 import * as Components from './utils/components.js';
 import * as DeckConfig from './utils/deckConfig.js';
@@ -15,7 +16,7 @@ let currentTab = 'portent';
 
 /**
  * Switch between calculator tabs
- * @param {string} tab - Tab name (portent, surge, wave)
+ * @param {string} tab - Tab name (portent, surge, wave, vortex)
  */
 function switchTab(tab) {
     // Update body theme
@@ -43,6 +44,8 @@ function switchTab(tab) {
         Surge.updateUI();
     } else if (tab === 'wave') {
         Wave.updateUI();
+    } else if (tab === 'vortex') {
+        Vortex.updateUI();
     }
 }
 
@@ -119,6 +122,14 @@ function initWaveInputs() {
 }
 
 /**
+ * Initialize Vortex calculator inputs
+ */
+function initVortexInputs() {
+    // Vortex calculator has its own init() that handles inputs
+    Vortex.init();
+}
+
+/**
  * Initialize service worker for offline support
  */
 function initServiceWorker() {
@@ -167,6 +178,7 @@ function init() {
     initPortentInputs();
     initSurgeInputs();
     initWaveInputs();
+    initVortexInputs();
     initServiceWorker();
     initUXEnhancements();
 
@@ -175,11 +187,12 @@ function init() {
 
     // Add keyboard navigation
     document.addEventListener('keydown', (e) => {
-        // Alt+1/2/3 to switch tabs
+        // Alt+1/2/3/4 to switch tabs
         if (e.altKey) {
             if (e.key === '1') switchTab('portent');
             else if (e.key === '2') switchTab('surge');
             else if (e.key === '3') switchTab('wave');
+            else if (e.key === '4') switchTab('vortex');
         }
     });
 
