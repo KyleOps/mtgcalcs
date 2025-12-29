@@ -106,6 +106,9 @@
             <button class="tab-button vortex" data-tab="vortex" aria-pressed="false">
                 🌀 Monstrous Vortex
             </button>
+            <button class="tab-button lands" data-tab="lands" aria-pressed="false">
+                🏔️ Land Drops
+            </button>
         </nav>
 
         <!-- PORTENT TAB -->
@@ -263,6 +266,44 @@
                 </section>
             </div>
         </div>
+
+        <!-- LAND DROPS TAB -->
+        <div id="lands-tab" class="tab-content" role="tabpanel" aria-labelledby="lands">
+            <h1>🏔️ Land Drop Calculator</h1>
+            <p class="card-text">"Will I make my land drops?"</p>
+
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Opening hand distribution">
+                    <h2>📊 Opening Hand Land Distribution</h2>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="lands-opening-chart" role="img" aria-label="Opening hand lands chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #4ade80;"></span> Probability of Drawing X Lands</span>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Land drop probability">
+                    <h2>📈 Land Drop Probability by Turn</h2>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="lands-landdrop-chart" role="img" aria-label="Land drop probability chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #4ade80;"></span> Make Land Drop</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> Miss Land Drop</span>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Statistics">
+                    <h2>🔍 Land Drop Statistics</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="lands-statsTable">
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+
     </div>
 
     <!-- Load Chart.js on demand -->
