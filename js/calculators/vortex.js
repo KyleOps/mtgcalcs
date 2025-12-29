@@ -6,7 +6,7 @@
  * discover X, where X is that spell's mana value."
  */
 
-import { createCache, formatNumber } from '../utils/simulation.js';
+import { createCache, formatNumber, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
@@ -206,96 +206,111 @@ function updateChart(config, results) {
     const avgSpellCMCData = cmcValues.map(cmc => results[cmc]?.avgSpellCMC || 0);
     const avgSpellsCastData = cmcValues.map(cmc => results[cmc]?.avgSpellsPerTrigger || 0);
 
-    if (chart) chart.destroy();
-
-    chart = new Chart(document.getElementById('vortex-chart'), {
-        type: 'line',
-        data: {
-            labels: cmcValues.map(cmc => `${cmc} CMC`),
-            datasets: [
-                {
-                    label: 'Avg Free Mana Value',
-                    data: freeManaData,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316'),
-                    yAxisID: 'yMana'
-                },
-                {
-                    label: 'Avg Spell CMC Found',
-                    data: avgSpellCMCData,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e'),
-                    yAxisID: 'yMana'
-                },
-                {
-                    label: 'Avg Spells Cast',
-                    data: avgSpellsCastData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc'),
-                    yAxisID: 'ySpells'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+    if (!chart) {
+        // First time: create chart
+        chart = new Chart(document.getElementById('vortex-chart'), {
+            type: 'line',
+            data: {
+                labels: cmcValues.map(cmc => `${cmc} CMC`),
+                datasets: [
+                    {
+                        label: 'Avg Free Mana Value',
+                        data: freeManaData,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316'),
+                        yAxisID: 'yMana'
+                    },
+                    {
+                        label: 'Avg Spell CMC Found',
+                        data: avgSpellCMCData,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e'),
+                        yAxisID: 'yMana'
+                    },
+                    {
+                        label: 'Avg Spells Cast',
+                        data: avgSpellsCastData,
+                        borderColor: '#c084fc',
+                        backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc'),
+                        yAxisID: 'ySpells'
+                    }
+                ]
             },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            if (ctx.datasetIndex === 0) {
-                                return `Free mana: ${ctx.parsed.y.toFixed(2)} avg`;
-                            } else if (ctx.datasetIndex === 1) {
-                                return `Spell CMC: ${ctx.parsed.y.toFixed(2)} avg`;
-                            } else {
-                                return `Spells cast: ${ctx.parsed.y.toFixed(2)} avg`;
+            options: {
+                ...getChartAnimationConfig(),
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.datasetIndex === 0) {
+                                    return `Free mana: ${ctx.parsed.y.toFixed(2)} avg`;
+                                } else if (ctx.datasetIndex === 1) {
+                                    return `Spell CMC: ${ctx.parsed.y.toFixed(2)} avg`;
+                                } else {
+                                    return `Spells cast: ${ctx.parsed.y.toFixed(2)} avg`;
+                                }
                             }
                         }
                     }
-                }
-            },
-            scales: {
-                yMana: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Mana Value', color: '#f97316' },
-                    grid: { color: 'rgba(249, 115, 22, 0.2)' },
-                    ticks: { color: '#f97316' }
                 },
-                ySpells: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    max: 3,
-                    title: { display: true, text: 'Spells Cast', color: '#c084fc' },
-                    grid: { display: false },
-                    ticks: { color: '#c084fc' }
-                },
-                x: {
-                    grid: { color: 'rgba(249, 115, 22, 0.2)' },
-                    ticks: { color: '#a09090' }
+                scales: {
+                    yMana: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Mana Value', color: '#f97316' },
+                        grid: { color: 'rgba(249, 115, 22, 0.2)' },
+                        ticks: { color: '#f97316' }
+                    },
+                    ySpells: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 3,
+                        title: { display: true, text: 'Spells Cast', color: '#c084fc' },
+                        grid: { display: false },
+                        ticks: { color: '#c084fc' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(249, 115, 22, 0.2)' },
+                        ticks: { color: '#a09090' }
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // Subsequent times: update data without recreating
+        chart.data.labels = cmcValues.map(cmc => `${cmc} CMC`);
+        chart.data.datasets[0].data = freeManaData;
+        chart.data.datasets[0].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
+        chart.data.datasets[0].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316');
+        chart.data.datasets[1].data = avgSpellCMCData;
+        chart.data.datasets[1].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
+        chart.data.datasets[1].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e');
+        chart.data.datasets[2].data = avgSpellsCastData;
+        chart.data.datasets[2].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
+        chart.data.datasets[2].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc');
+        chart.update();
+    }
 }
 
 /**

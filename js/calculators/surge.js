@@ -3,7 +3,7 @@
  * Simulates permanents played with Primal Surge
  */
 
-import { formatNumber, formatPercentage, createCache } from '../utils/simulation.js';
+import { formatNumber, formatPercentage, createCache, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
@@ -124,83 +124,95 @@ function updateChart(config, result) {
         percentData.push(sim.percentOfDeck);
     }
 
-    if (chart) chart.destroy();
-
-    chart = new Chart(document.getElementById('surge-chart'), {
-        type: 'line',
-        data: {
-            labels: nonPermRange.map(x => x + ' non-perm'),
-            datasets: [
-                {
-                    label: 'Expected Permanents',
-                    data: expectedPermsData,
-                    borderColor: '#4ade80',
-                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
-                    pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80'),
-                    yAxisID: 'yPerms'
-                },
-                {
-                    label: '% of Deck',
-                    data: percentData,
-                    borderColor: '#dc2626',
-                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
-                    pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626'),
-                    yAxisID: 'yPercent'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+    if (!chart) {
+        // First time: create chart
+        chart = new Chart(document.getElementById('surge-chart'), {
+            type: 'line',
+            data: {
+                labels: nonPermRange.map(x => x + ' non-perm'),
+                datasets: [
+                    {
+                        label: 'Expected Permanents',
+                        data: expectedPermsData,
+                        borderColor: '#4ade80',
+                        backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                        pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80'),
+                        yAxisID: 'yPerms'
+                    },
+                    {
+                        label: '% of Deck',
+                        data: percentData,
+                        borderColor: '#dc2626',
+                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                        pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626'),
+                        yAxisID: 'yPercent'
+                    }
+                ]
             },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            if (ctx.datasetIndex === 0) {
-                                return `Expected permanents: ${ctx.parsed.y.toFixed(1)}`;
-                            } else {
-                                return `% of deck: ${ctx.parsed.y.toFixed(1)}%`;
+            options: {
+                ...getChartAnimationConfig(),
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.datasetIndex === 0) {
+                                    return `Expected permanents: ${ctx.parsed.y.toFixed(1)}`;
+                                } else {
+                                    return `% of deck: ${ctx.parsed.y.toFixed(1)}%`;
+                                }
                             }
                         }
                     }
-                }
-            },
-            scales: {
-                yPerms: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Expected Permanents', color: '#4ade80' },
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#4ade80' }
                 },
-                yPercent: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: '% of Deck', color: '#dc2626' },
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#dc2626' }
-                },
-                x: {
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#a09090' }
+                scales: {
+                    yPerms: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Expected Permanents', color: '#4ade80' },
+                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                        ticks: { color: '#4ade80' }
+                    },
+                    yPercent: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: '% of Deck', color: '#dc2626' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#dc2626' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                        ticks: { color: '#a09090' }
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // Subsequent times: update data without recreating
+        chart.data.labels = nonPermRange.map(x => x + ' non-perm');
+        chart.data.datasets[0].data = expectedPermsData;
+        chart.data.datasets[0].pointRadius = nonPermRange.map(x => x === config.nonPermanents ? 8 : 4);
+        chart.data.datasets[0].pointBackgroundColor = nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80');
+        chart.data.datasets[1].data = percentData;
+        chart.data.datasets[1].pointRadius = nonPermRange.map(x => x === config.nonPermanents ? 8 : 4);
+        chart.data.datasets[1].pointBackgroundColor = nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626');
+        chart.update();
+    }
 }
 
 /**

@@ -3,7 +3,7 @@
  * Simulates card type diversity for Portent of Calamity spell
  */
 
-import { createCache, partialShuffle, formatNumber, formatPercentage } from '../utils/simulation.js';
+import { createCache, partialShuffle, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
@@ -159,83 +159,95 @@ function updateChart(config, results) {
     const prob4PlusData = xValues.map(x => results[x].prob4Plus * 100);
     const expectedCardsData = xValues.map(x => results[x].expectedCards);
 
-    if (chart) chart.destroy();
-
-    chart = new Chart(document.getElementById('portent-combinedChart'), {
-        type: 'line',
-        data: {
-            labels: xValues.map(x => 'X=' + x),
-            datasets: [
-                {
-                    label: 'P(Free Spell) %',
-                    data: prob4PlusData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
-                    yAxisID: 'yProb'
-                },
-                {
-                    label: 'Expected Cards',
-                    data: expectedCardsData,
-                    borderColor: '#dc2626',
-                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
-                    yAxisID: 'yCards'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+    if (!chart) {
+        // First time: create chart
+        chart = new Chart(document.getElementById('portent-combinedChart'), {
+            type: 'line',
+            data: {
+                labels: xValues.map(x => 'X=' + x),
+                datasets: [
+                    {
+                        label: 'P(Free Spell) %',
+                        data: prob4PlusData,
+                        borderColor: '#c084fc',
+                        backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
+                        yAxisID: 'yProb'
+                    },
+                    {
+                        label: 'Expected Cards',
+                        data: expectedCardsData,
+                        borderColor: '#dc2626',
+                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
+                        yAxisID: 'yCards'
+                    }
+                ]
             },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            if (ctx.datasetIndex === 0) {
-                                return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
-                            } else {
-                                return `Cards to hand: ${ctx.parsed.y.toFixed(2)}`;
+            options: {
+                ...getChartAnimationConfig(),
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.datasetIndex === 0) {
+                                    return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
+                                } else {
+                                    return `Cards to hand: ${ctx.parsed.y.toFixed(2)}`;
+                                }
                             }
                         }
                     }
-                }
-            },
-            scales: {
-                yProb: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
-                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                    ticks: { color: '#c084fc' }
                 },
-                yCards: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Expected Cards', color: '#dc2626' },
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#dc2626' }
-                },
-                x: {
-                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                    ticks: { color: '#a09090' }
+                scales: {
+                    yProb: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
+                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                        ticks: { color: '#c084fc' }
+                    },
+                    yCards: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Expected Cards', color: '#dc2626' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#dc2626' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                        ticks: { color: '#a09090' }
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // Subsequent times: update data without recreating
+        chart.data.labels = xValues.map(x => 'X=' + x);
+        chart.data.datasets[0].data = prob4PlusData;
+        chart.data.datasets[0].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
+        chart.data.datasets[0].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#c084fc');
+        chart.data.datasets[1].data = expectedCardsData;
+        chart.data.datasets[1].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
+        chart.data.datasets[1].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#dc2626');
+        chart.update();
+    }
 }
 
 /**

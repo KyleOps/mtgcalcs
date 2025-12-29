@@ -3,7 +3,7 @@
  * Simulates permanents played with Genesis Wave for X
  */
 
-import { createCache, partialShuffle, formatNumber, formatPercentage } from '../utils/simulation.js';
+import { createCache, partialShuffle, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 const CONFIG = {
@@ -161,82 +161,94 @@ function updateChart(config, results) {
     const expectedPermsData = xValues.map(x => results[x].expectedPermanents);
     const cardsRevealedData = xValues.map(x => results[x].cardsRevealed);
 
-    if (chart) chart.destroy();
-
-    chart = new Chart(document.getElementById('wave-chart'), {
-        type: 'line',
-        data: {
-            labels: xValues.map(x => 'X=' + x),
-            datasets: [
-                {
-                    label: 'Expected Permanents',
-                    data: expectedPermsData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#38bdf8'),
-                    yAxisID: 'yPerms'
-                },
-                {
-                    label: 'Cards Revealed',
-                    data: cardsRevealedData,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#22c55e'),
-                    yAxisID: 'yCards'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+    if (!chart) {
+        // First time: create chart
+        chart = new Chart(document.getElementById('wave-chart'), {
+            type: 'line',
+            data: {
+                labels: xValues.map(x => 'X=' + x),
+                datasets: [
+                    {
+                        label: 'Expected Permanents',
+                        data: expectedPermsData,
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#38bdf8'),
+                        yAxisID: 'yPerms'
+                    },
+                    {
+                        label: 'Cards Revealed',
+                        data: cardsRevealedData,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#22c55e'),
+                        yAxisID: 'yCards'
+                    }
+                ]
             },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            if (ctx.datasetIndex === 0) {
-                                return `Permanents played: ${ctx.parsed.y.toFixed(2)}`;
-                            } else {
-                                return `Cards revealed: ${ctx.parsed.y}`;
+            options: {
+                ...getChartAnimationConfig(),
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.datasetIndex === 0) {
+                                    return `Permanents played: ${ctx.parsed.y.toFixed(2)}`;
+                                } else {
+                                    return `Cards revealed: ${ctx.parsed.y}`;
+                                }
                             }
                         }
                     }
-                }
-            },
-            scales: {
-                yPerms: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Expected Permanents', color: '#38bdf8' },
-                    grid: { color: 'rgba(14, 165, 233, 0.2)' },
-                    ticks: { color: '#38bdf8' }
                 },
-                yCards: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Cards Revealed', color: '#22c55e' },
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#22c55e' }
-                },
-                x: {
-                    grid: { color: 'rgba(14, 165, 233, 0.2)' },
-                    ticks: { color: '#a09090' }
+                scales: {
+                    yPerms: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Expected Permanents', color: '#38bdf8' },
+                        grid: { color: 'rgba(14, 165, 233, 0.2)' },
+                        ticks: { color: '#38bdf8' }
+                    },
+                    yCards: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Cards Revealed', color: '#22c55e' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#22c55e' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(14, 165, 233, 0.2)' },
+                        ticks: { color: '#a09090' }
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // Subsequent times: update data without recreating
+        chart.data.labels = xValues.map(x => 'X=' + x);
+        chart.data.datasets[0].data = expectedPermsData;
+        chart.data.datasets[0].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
+        chart.data.datasets[0].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#38bdf8');
+        chart.data.datasets[1].data = cardsRevealedData;
+        chart.data.datasets[1].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
+        chart.data.datasets[1].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#22c55e');
+        chart.update();
+    }
 }
 
 /**
