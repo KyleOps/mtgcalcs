@@ -436,6 +436,16 @@ export function updateUI() {
         resultsCount: Object.keys(results).length
     });
 
+    // Show/hide import warning based on whether we have card details
+    const importWarning = document.getElementById('vortex-import-warning');
+    if (importWarning) {
+        if (config.cardDetails.length > 0) {
+            importWarning.style.display = 'none';
+        } else {
+            importWarning.style.display = 'block';
+        }
+    }
+
     if (config.cardDetails.length === 0 || config.creaturesPower5Plus === 0 || Object.keys(results).length === 0) {
         if (chart) chart.destroy();
         document.getElementById('vortex-comparisonTable').innerHTML = '<tr><td colspan="5">Configure your deck with creatures (power 5+) to see results</td></tr>';

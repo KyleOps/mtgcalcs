@@ -282,6 +282,16 @@ export async function batchFetchCards(cardNames) {
  * @returns {Promise<Object>} - Card type counts with import metadata
  */
 export async function importDecklistBatch(decklistText, progressCallback = null) {
+    // Stage 1: Parsing (0-10%)
+    if (progressCallback) {
+        progressCallback({
+            processed: 0,
+            total: 100,
+            currentCard: 'Parsing decklist...',
+            percentage: 0
+        });
+    }
+
     const parseResult = parseDecklistText(decklistText);
     const { cards, hasSideboard, sideboardCount } = parseResult;
 
@@ -306,15 +316,14 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
 
     if (progressCallback) {
         progressCallback({
-            processed: 0,
-            total: uniqueCards.length,
-            currentCard: 'Fetching card data...',
-            percentage: 0
+            processed: 10,
+            total: 100,
+            currentCard: `Found ${uniqueCards.length} unique cards`,
+            percentage: 10
         });
     }
 
-    // Batch fetch in chunks of 50 (smoother progress for typical 100-card decks)
-    // Scryfall allows up to 75, but 50 gives better UX with 2 batches for 100 cards
+    // Stage 2: Fetching from Scryfall (10-80%)
     const BATCH_SIZE = 50;
     const allCardData = [];
     const totalBatches = Math.ceil(uniqueCards.length / BATCH_SIZE);
@@ -326,14 +335,17 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
         const chunkData = await batchFetchCards(chunk);
         allCardData.push(...chunkData);
 
-        // Update progress after batch completes
+        // Update progress: 10% to 80% range for fetching
         if (progressCallback) {
             const processedCount = Math.min(i + BATCH_SIZE, uniqueCards.length);
+            const fetchProgress = (processedCount / uniqueCards.length) * 70; // 70% of total progress
+            const totalProgress = 10 + fetchProgress; // Start at 10%
+
             progressCallback({
                 processed: processedCount,
                 total: uniqueCards.length,
-                currentCard: `Fetched ${processedCount}/${uniqueCards.length} unique cards`,
-                percentage: Math.round((processedCount / uniqueCards.length) * 100)
+                currentCard: `Fetching batch ${batchNum}/${totalBatches} from Scryfall...`,
+                percentage: Math.round(totalProgress)
             });
         }
 
@@ -341,6 +353,16 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
         if (i + BATCH_SIZE < uniqueCards.length) {
             await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
         }
+    }
+
+    // Stage 3: Analyzing cards (80-90%)
+    if (progressCallback) {
+        progressCallback({
+            processed: 80,
+            total: 100,
+            currentCard: 'Analyzing card types and attributes...',
+            percentage: 80
+        });
     }
 
     // Count types
@@ -453,9 +475,29 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
     console.log(`Found ${totalFound}/${totalExpected} cards (${foundCards.size}/${uniqueCards.length} unique)`);
     console.log(`Card details: ${cardDetails.length} non-land cards with full CMC/power data`);
 
+    // Stage 4: Calculating statistics (90-95%)
+    if (progressCallback) {
+        progressCallback({
+            processed: 90,
+            total: 100,
+            currentCard: 'Calculating deck statistics...',
+            percentage: 90
+        });
+    }
+
     // Calculate summary stats from card details
     const creaturesPower5Plus = cardDetails.filter(c => c.isPower5Plus).length;
     console.log('Creatures with power 5+:', creaturesPower5Plus);
+
+    // Stage 5: Finalizing (95-100%)
+    if (progressCallback) {
+        progressCallback({
+            processed: 95,
+            total: 100,
+            currentCard: 'Finalizing import...',
+            percentage: 95
+        });
+    }
 
     return {
         ...typeCounts,
