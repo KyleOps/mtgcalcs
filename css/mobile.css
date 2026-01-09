@@ -54,19 +54,31 @@
         margin-bottom: var(--spacing-lg);
     }
 
+    /* Hide horizontal tabs, show dropdown selector on mobile */
     .tab-nav {
-        gap: var(--spacing-sm);
-        margin-bottom: var(--spacing-lg);
-        padding: 0;
+        display: none !important;
     }
 
-    .tab-button {
-        padding: 12px var(--spacing-md);
-        font-size: 0.85rem;
-        letter-spacing: 0.5px;
-        flex: 1;
-        min-width: 0;
-        white-space: nowrap;
+    .calculator-selector {
+        display: block !important;
+    }
+
+    .selector-button {
+        font-size: 1rem;
+        padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .selector-icon {
+        font-size: 1.25rem;
+    }
+
+    .selector-option {
+        padding: var(--spacing-md) var(--spacing-lg);
+        font-size: 0.95rem;
+    }
+
+    .selector-option-icon {
+        font-size: 1.25rem;
     }
 
     .panel {

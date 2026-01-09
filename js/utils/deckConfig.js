@@ -17,6 +17,10 @@ let deckState = {
     lands: 36,
     battles: 0,
 
+    // Actual card count (for dual-typed cards like "Artifact Creature")
+    // If not set, falls back to sum of type counts
+    actualCardCount: null,
+
     // CMC breakdown (for Wave and Vortex calculators)
     cmc0: 10,
     cmc1: 12,
@@ -31,6 +35,9 @@ let deckState = {
 
     // Card-level data (new format for Vortex)
     cardDetails: [],
+
+    // Imported card data by name (for detailed lookups)
+    cardsByName: {},
 
     // Power 5+ creatures by CMC (for Vortex discover chains - deprecated, use cardDetails)
     power5PlusCMC3: 0,
@@ -63,13 +70,30 @@ export function getDeckConfig() {
 }
 
 /**
+ * Get imported card data
+ * @returns {Object} - Imported card data including cardsByName
+ */
+export function getImportedCardData() {
+    return {
+        cardDetails: deckState.cardDetails,
+        cardsByName: deckState.cardsByName
+    };
+}
+
+/**
  * Get total deck size (excluding non-permanents for some calcs)
  * @param {boolean} includeNonPermanents - Whether to include instants/sorceries
  * @returns {number} - Total deck size
  */
 export function getDeckSize(includeNonPermanents = true) {
-    const { creatures, instants, sorceries, artifacts, enchantments, planeswalkers, lands, battles } = deckState;
+    const { creatures, instants, sorceries, artifacts, enchantments, planeswalkers, lands, battles, actualCardCount } = deckState;
 
+    // If actualCardCount is set (from import with dual-typed cards), use it
+    if (actualCardCount !== null && actualCardCount !== undefined && includeNonPermanents) {
+        return actualCardCount;
+    }
+
+    // Otherwise, fallback to summing type counts (for manual entry or when actualCardCount not set)
     if (includeNonPermanents) {
         return creatures + instants + sorceries + artifacts + enchantments + planeswalkers + lands + battles;
     } else {
@@ -85,6 +109,13 @@ export function getDeckSize(includeNonPermanents = true) {
 export function updateField(field, value) {
     if (field in deckState) {
         deckState[field] = Math.max(0, parseInt(value) || 0);
+
+        // If user manually edits type counts, clear actualCardCount so it uses the sum
+        const typeFields = ['creatures', 'instants', 'sorceries', 'artifacts', 'enchantments', 'planeswalkers', 'lands', 'battles'];
+        if (typeFields.includes(field)) {
+            deckState.actualCardCount = null;
+        }
+
         notifyUpdates();
     }
 }
@@ -96,8 +127,8 @@ export function updateField(field, value) {
 export function updateDeck(config) {
     Object.keys(config).forEach(key => {
         if (key in deckState) {
-            // Handle arrays (like cardDetails) directly without parsing
-            if (Array.isArray(config[key])) {
+            // Handle arrays and objects (like cardDetails, cardsByName) directly without parsing
+            if (Array.isArray(config[key]) || typeof config[key] === 'object' && config[key] !== null && !(config[key] instanceof Number)) {
                 deckState[key] = config[key];
             } else {
                 deckState[key] = Math.max(0, parseInt(config[key]) || 0);
@@ -212,11 +243,8 @@ export function initDeckConfig() {
 
                 updateTotalDisplay();
 
-                // Only count actual card types (not CMC breakdown or power 5+)
-                const totalCards = (typeCounts.creatures || 0) + (typeCounts.instants || 0) +
-                                   (typeCounts.sorceries || 0) + (typeCounts.artifacts || 0) +
-                                   (typeCounts.enchantments || 0) + (typeCounts.planeswalkers || 0) +
-                                   (typeCounts.lands || 0) + (typeCounts.battles || 0);
+                // Use actualCardCount for accurate deck size (accounts for dual-typed cards)
+                const totalCards = typeCounts.actualCardCount || 0;
 
                 // Build status message with warnings
                 const metadata = typeCounts.importMetadata;

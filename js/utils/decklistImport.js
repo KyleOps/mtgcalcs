@@ -113,7 +113,7 @@ async function fetchCardData(cardName) {
 /**
  * Determine card type category from type line
  * @param {string} typeLine - Card type line (e.g., "Legendary Creature — Human Wizard")
- * @returns {string} - Card type category
+ * @returns {string} - Primary card type category (for backward compatibility)
  */
 function getCardTypeCategory(typeLine) {
     const types = typeLine.toLowerCase();
@@ -130,6 +130,33 @@ function getCardTypeCategory(typeLine) {
 
     // Default to artifacts for unknown types
     return 'artifacts';
+}
+
+/**
+ * Get all type categories from type line (for dual-typed cards)
+ * @param {string} typeLine - Card type line (e.g., "Artifact Creature — Soldier")
+ * @returns {Array<string>} - Array of all matching type categories
+ */
+function getAllCardTypes(typeLine) {
+    const types = typeLine.toLowerCase();
+    const categories = [];
+
+    // Check all types (order matters for primary type)
+    if (types.includes('creature')) categories.push('creatures');
+    if (types.includes('planeswalker')) categories.push('planeswalkers');
+    if (types.includes('battle')) categories.push('battles');
+    if (types.includes('land')) categories.push('lands');
+    if (types.includes('instant')) categories.push('instants');
+    if (types.includes('sorcery')) categories.push('sorceries');
+    if (types.includes('artifact')) categories.push('artifacts');
+    if (types.includes('enchantment')) categories.push('enchantments');
+
+    // If no types matched, default to artifacts
+    if (categories.length === 0) {
+        categories.push('artifacts');
+    }
+
+    return categories;
 }
 
 /**
@@ -380,8 +407,14 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
     // Store detailed card information for each non-land card
     const cardDetails = [];
 
+    // Store card data by name (for Rashmi and other calculators)
+    const cardsByName = {};
+
     // Track found cards
     const foundCards = new Set();
+
+    // Track actual card count (for deck size calculation with dual-typed cards)
+    let actualCardCount = 0;
 
     allCardData.forEach(cardData => {
         if (cardData && cardData.name && cardData.type_line) {
@@ -425,17 +458,39 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
                     power = cardData.power;
                 }
 
-                const category = getCardTypeCategory(typeLine);
-                typeCounts[category] += count;
+                // Get all type categories for dual-typed cards (e.g., "Artifact Creature")
+                const allCategories = getAllCardTypes(typeLine);
+                const primaryCategory = allCategories[0]; // First category is primary
+
+                // Add count to ALL applicable categories
+                allCategories.forEach(category => {
+                    typeCounts[category] += count;
+                });
+
+                // Track actual card count (only count each card once for deck size)
+                actualCardCount += count;
+
                 foundCards.add(matchedKey);
 
+                // Store card data by name for detailed lookups
+                cardsByName[cardData.name] = {
+                    name: cardData.name,
+                    type_line: typeLine,
+                    cmc: cmc,
+                    mana_cost: cardData.mana_cost || '',
+                    power: power,
+                    category: primaryCategory,
+                    allCategories: allCategories, // Store all categories
+                    count: count
+                };
+
                 // Store detailed card info for non-lands
-                if (category !== 'lands' && cmc !== undefined) {
+                if (primaryCategory !== 'lands' && cmc !== undefined) {
                     const cmcValue = Math.floor(cmc);
 
                     // Parse power (handle *, 1+*, etc.)
                     let powerNum = null;
-                    if (category === 'creatures' && power !== undefined && power !== null) {
+                    if (allCategories.includes('creatures') && power !== undefined && power !== null) {
                         if (power !== '*' && power !== '1+*' && !isNaN(parseInt(power))) {
                             powerNum = parseInt(power);
                         }
@@ -446,7 +501,8 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
                         cardDetails.push({
                             name: cardData.name,
                             cmc: cmcValue,
-                            type: category,
+                            type: primaryCategory,
+                            allTypes: allCategories, // Store all types for filtering
                             power: powerNum,
                             isPower5Plus: powerNum !== null && powerNum >= 5
                         });
@@ -501,7 +557,9 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
 
     return {
         ...typeCounts,
+        actualCardCount,  // Actual deck size (for dual-typed cards)
         cardDetails,  // Full card-level data
+        cardsByName,  // Card data indexed by name
         creaturesPower5Plus,
         // Import metadata
         importMetadata: {
@@ -510,7 +568,7 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
             missingCards: missingCardDetails,
             missingCardCount,
             totalCardsAttempted: totalExpected,
-            totalCardsImported: totalFound
+            totalCardsImported: actualCardCount  // Use actual count
         }
     };
 }

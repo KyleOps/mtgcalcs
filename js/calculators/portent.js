@@ -22,47 +22,75 @@ let chart = null;
  * @param {number} deckSize - Total cards in library
  * @param {Object} typeCounts - Card counts by type
  * @param {number} x - X value (cards to reveal)
+ * @param {Object} cardData - Imported card data (for accurate simulation)
  * @returns {Object} - Simulation results
  */
-function simulatePortent(deckSize, typeCounts, x) {
+function simulatePortent(deckSize, typeCounts, x, cardData) {
     const cacheKey = `${deckSize}-${x}`;
     const cached = simulationCache.get(cacheKey);
     if (cached) return cached;
 
+    // IMPORTANT: Include ALL types (including land!) - Portent cares about ALL card types
     const types = Object.keys(typeCounts).filter(t => typeCounts[t] > 0);
+    const typeToIndex = {};
+    types.forEach((type, idx) => { typeToIndex[type] = idx; });
     const numTypes = types.length;
 
-    // Build deck array with type indices
-    const deck = new Int8Array(deckSize);
-    let idx = 0;
-    types.forEach((type, typeIdx) => {
-        const count = typeCounts[type];
-        for (let i = 0; i < count; i++) {
-            deck[idx++] = typeIdx;
-        }
-    });
-    for (let i = idx; i < deckSize; i++) {
-        deck[i] = -1; // Empty slots
+    // Build deck array where each card is represented as a bitmask of its types
+    // This handles dual-typed cards correctly (e.g., Artifact Creature has both bits set)
+    const deck = [];
+
+    if (cardData && cardData.cardsByName && Object.keys(cardData.cardsByName).length > 0) {
+        // Use actual card data for accurate simulation (INCLUDING LANDS!)
+        Object.values(cardData.cardsByName).forEach(card => {
+            if (card.type_line) {
+                // Determine which types this card has
+                let typeMask = 0;
+                const cardTypes = card.type_line.toLowerCase();
+
+                types.forEach((type, idx) => {
+                    if (cardTypes.includes(type)) {
+                        typeMask |= (1 << idx);
+                    }
+                });
+
+                // Add this card (with its type mask) to the deck
+                for (let i = 0; i < card.count; i++) {
+                    deck.push(typeMask);
+                }
+            }
+        });
+    } else {
+        // Fallback: assume each card is single-typed (for manual entry)
+        // This includes lands too!
+        types.forEach((type, typeIdx) => {
+            const count = typeCounts[type];
+            const typeMask = 1 << typeIdx;
+            for (let i = 0; i < count; i++) {
+                deck.push(typeMask);
+            }
+        });
     }
 
     const typeCountDist = new Uint32Array(numTypes + 1);
     let totalCardsToHand = 0;
     const drawCount = Math.min(x, deckSize);
-    const seenTypes = new Uint8Array(numTypes);
 
     // Run simulations
     for (let iter = 0; iter < CONFIG.ITERATIONS; iter++) {
-        seenTypes.fill(0);
-        let uniqueTypes = 0;
-
         // Partial Fisher-Yates shuffle
         partialShuffle(deck, drawCount, deckSize);
 
-        // Count unique types
+        // Count unique types from revealed cards
+        let seenTypesMask = 0;
         for (let i = 0; i < drawCount; i++) {
-            const cardType = deck[i];
-            if (cardType >= 0 && !seenTypes[cardType]) {
-                seenTypes[cardType] = 1;
+            seenTypesMask |= deck[i];
+        }
+
+        // Count bits set in mask (number of unique types)
+        let uniqueTypes = 0;
+        for (let i = 0; i < numTypes; i++) {
+            if (seenTypesMask & (1 << i)) {
                 uniqueTypes++;
             }
         }
@@ -86,6 +114,8 @@ function simulatePortent(deckSize, typeCounts, x) {
  */
 export function getDeckConfig() {
     const config = DeckConfig.getDeckConfig();
+    const cardData = DeckConfig.getImportedCardData();
+
     const types = {
         creature: config.creatures,
         instant: config.instants,
@@ -97,7 +127,10 @@ export function getDeckConfig() {
         battle: config.battles
     };
 
-    const deckSize = Object.values(types).reduce((sum, count) => sum + count, 0);
+    // Use actualCardCount if available (accounts for dual-typed cards AND already includes lands), otherwise sum
+    const deckSize = config.actualCardCount !== null && config.actualCardCount !== undefined
+        ? config.actualCardCount  // Already includes lands!
+        : Object.values(types).reduce((sum, count) => sum + count, 0);
 
     // Clear cache if deck changed
     const newHash = JSON.stringify(types);
@@ -114,7 +147,8 @@ export function getDeckConfig() {
     return {
         deckSize,
         x: parseInt(document.getElementById('portent-xValue').value) || 5,
-        types
+        types,
+        cardData
     };
 }
 
@@ -134,7 +168,7 @@ export function calculate() {
     const maxX = Math.min(config.x + CONFIG.X_RANGE_AFTER, config.deckSize);
 
     for (let testX = minX; testX <= maxX; testX++) {
-        const sim = simulatePortent(config.deckSize, config.types, testX);
+        const sim = simulatePortent(config.deckSize, config.types, testX, config.cardData);
         const typeDist = sim.typeDist;
 
         results[testX] = {
@@ -142,7 +176,8 @@ export function calculate() {
             prob4Plus: typeDist.slice(CONFIG.FREE_SPELL_THRESHOLD).reduce((a, b) => a + b, 0),
             probExact4: typeDist[CONFIG.FREE_SPELL_THRESHOLD] || 0,
             prob5Plus: typeDist.slice(CONFIG.FREE_SPELL_THRESHOLD + 1).reduce((a, b) => a + b, 0),
-            expectedTypes: typeDist.reduce((sum, p, i) => sum + p * i, 0)
+            expectedTypes: typeDist.reduce((sum, p, i) => sum + p * i, 0),
+            typeDist: typeDist
         };
     }
 
@@ -157,7 +192,7 @@ export function calculate() {
 function updateChart(config, results) {
     const xValues = Object.keys(results).map(Number).sort((a, b) => a - b);
     const prob4PlusData = xValues.map(x => results[x].prob4Plus * 100);
-    const expectedCardsData = xValues.map(x => results[x].expectedCards);
+    const expectedTypesData = xValues.map(x => results[x].expectedTypes);
 
     if (!chart) {
         // First time: create chart
@@ -178,15 +213,15 @@ function updateChart(config, results) {
                         yAxisID: 'yProb'
                     },
                     {
-                        label: 'Expected Cards',
-                        data: expectedCardsData,
+                        label: 'Types Exiled',
+                        data: expectedTypesData,
                         borderColor: '#dc2626',
                         backgroundColor: 'rgba(220, 38, 38, 0.1)',
                         fill: false,
                         tension: 0.3,
                         pointRadius: xValues.map(x => x === config.x ? 8 : 4),
                         pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
-                        yAxisID: 'yCards'
+                        yAxisID: 'yTypes'
                     }
                 ]
             },
@@ -206,7 +241,7 @@ function updateChart(config, results) {
                                 if (ctx.datasetIndex === 0) {
                                     return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
                                 } else {
-                                    return `Cards to hand: ${ctx.parsed.y.toFixed(2)}`;
+                                    return `Types exiled: ${ctx.parsed.y.toFixed(2)}`;
                                 }
                             }
                         }
@@ -222,11 +257,11 @@ function updateChart(config, results) {
                         grid: { color: 'rgba(139, 0, 0, 0.2)' },
                         ticks: { color: '#c084fc' }
                     },
-                    yCards: {
+                    yTypes: {
                         type: 'linear',
                         position: 'right',
                         beginAtZero: true,
-                        title: { display: true, text: 'Expected Cards', color: '#dc2626' },
+                        title: { display: true, text: 'Types Exiled', color: '#dc2626' },
                         grid: { drawOnChartArea: false },
                         ticks: { color: '#dc2626' }
                     },
@@ -243,7 +278,7 @@ function updateChart(config, results) {
         chart.data.datasets[0].data = prob4PlusData;
         chart.data.datasets[0].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
         chart.data.datasets[0].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#c084fc');
-        chart.data.datasets[1].data = expectedCardsData;
+        chart.data.datasets[1].data = expectedTypesData;
         chart.data.datasets[1].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
         chart.data.datasets[1].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#dc2626');
         chart.update();
@@ -264,21 +299,21 @@ function updateTable(config, results) {
             <th>X</th>
             <th>P(Free Spell)</th>
             <th>Δ Prob</th>
-            <th>E[Cards]</th>
-            <th>Δ Cards</th>
+            <th>Types Exiled</th>
+            <th>Δ Types</th>
         </tr>
     `;
 
     xValues.forEach((x) => {
         const r = results[x];
         const deltaProb = (r.prob4Plus - currentResult.prob4Plus) * 100;
-        const deltaCards = r.expectedCards - currentResult.expectedCards;
+        const deltaTypes = r.expectedTypes - currentResult.expectedTypes;
 
         const rowClass = x === config.x ? 'current' : '';
         const isBaseline = x === config.x;
 
         const probClass = deltaProb > 0.01 ? 'marginal-positive' : (deltaProb < -0.01 ? 'marginal-negative' : '');
-        const cardsClass = deltaCards > 0.001 ? 'marginal-positive' : (deltaCards < -0.001 ? 'marginal-negative' : '');
+        const typesClass = deltaTypes > 0.001 ? 'marginal-negative' : (deltaTypes < -0.001 ? 'marginal-positive' : '');
 
         tableHTML += `
             <tr class="${rowClass}">
@@ -287,15 +322,245 @@ function updateTable(config, results) {
                 <td class="${probClass}">
                     ${isBaseline ? '-' : (deltaProb >= 0 ? '+' : '') + deltaProb.toFixed(1) + '%'}
                 </td>
-                <td>${formatNumber(r.expectedCards)}</td>
-                <td class="${cardsClass}">
-                    ${isBaseline ? '-' : (deltaCards >= 0 ? '+' : '') + formatNumber(deltaCards)}
+                <td>${formatNumber(r.expectedTypes, 2)}</td>
+                <td class="${typesClass}">
+                    ${isBaseline ? '-' : (deltaTypes >= 0 ? '+' : '') + formatNumber(deltaTypes, 2)}
                 </td>
             </tr>
         `;
     });
 
     document.getElementById('portent-comparisonTable').innerHTML = tableHTML;
+}
+
+/**
+ * Update stats panel with current X analysis
+ * @param {Object} config - Deck configuration
+ * @param {Object} results - Calculation results
+ */
+function updateStats(config, results) {
+    const statsPanel = document.getElementById('portent-stats');
+    const currentResult = results[config.x];
+
+    if (statsPanel && currentResult) {
+        // Marginal value analysis (X+1 vs X-1)
+        const nextX = results[config.x + 1];
+        const prevX = results[config.x - 1];
+
+        let marginalUp = '';
+        let marginalDown = '';
+
+        if (nextX) {
+            const probDiff = (nextX.prob4Plus - currentResult.prob4Plus) * 100;
+            const typesDiff = nextX.expectedTypes - currentResult.expectedTypes;
+            const probColor = probDiff > 0 ? '#22c55e' : '#dc2626';
+            const typesColor = typesDiff > 0 ? '#dc2626' : '#22c55e';
+            marginalUp = `<span style="color: ${probColor};">${probDiff >= 0 ? '+' : ''}${probDiff.toFixed(1)}%</span> free spell, <span style="color: ${typesColor};">${typesDiff >= 0 ? '+' : ''}${formatNumber(typesDiff, 2)}</span> types exiled`;
+        } else {
+            marginalUp = '<span style="color: var(--text-dim);">N/A</span>';
+        }
+
+        if (prevX) {
+            const probDiff = (prevX.prob4Plus - currentResult.prob4Plus) * 100;
+            const typesDiff = prevX.expectedTypes - currentResult.expectedTypes;
+            const probColor = probDiff > 0 ? '#22c55e' : '#dc2626';
+            const typesColor = typesDiff > 0 ? '#dc2626' : '#22c55e';
+            marginalDown = `<span style="color: ${probColor};">${probDiff >= 0 ? '+' : ''}${probDiff.toFixed(1)}%</span> free spell, <span style="color: ${typesColor};">${typesDiff >= 0 ? '+' : ''}${formatNumber(typesDiff, 2)}</span> types exiled`;
+        } else {
+            marginalDown = '<span style="color: var(--text-dim);">N/A</span>';
+        }
+
+        // Calculate expected types hit
+        const expectedTypes = currentResult.expectedTypes || currentResult.typeDist.reduce((sum, p, i) => sum + p * i, 0);
+
+        // Create interpretation message
+        let interpretation = '';
+        if (currentResult.prob4Plus >= 0.90) {
+            interpretation = `<strong style="color: #c084fc;">Excellent!</strong> Very high chance to get a free spell.`;
+        } else if (currentResult.prob4Plus >= 0.75) {
+            interpretation = `<strong style="color: #9333ea;">Good!</strong> Reliable free spell trigger.`;
+        } else if (currentResult.prob4Plus >= 0.60) {
+            interpretation = `<strong style="color: #f59e0b;">Decent.</strong> Moderate success rate.`;
+        } else {
+            interpretation = `<strong style="color: #dc2626;">Low probability.</strong> Consider more card type diversity.`;
+        }
+
+        interpretation += `<br><small style="color: var(--text-secondary);">Average ${formatNumber(expectedTypes, 1)} types exiled per cast</small>`;
+
+        statsPanel.innerHTML = `
+            <h3>⚡ Portent of Calamity X=${config.x} Analysis</h3>
+            <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Free Spell Chance</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: #c084fc;">${formatPercentage(currentResult.prob4Plus)}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">4+ types revealed</div>
+                </div>
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Types Exiled</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: #dc2626;">${formatNumber(expectedTypes, 1)}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">avg per cast (1 per type)</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px; padding: 12px; background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px;">
+                <div style="margin-bottom: 8px;">${interpretation}</div>
+                <div style="color: var(--text-secondary); font-size: 0.9em;">
+                    <strong>Marginal Value:</strong><br>
+                    • X=${config.x + 1}: ${marginalUp}<br>
+                    • X=${config.x - 1}: ${marginalDown}
+                </div>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Extract types from a card using same logic as simulation
+ */
+function extractCardTypes(card) {
+    const types = [];
+    const lower = card.type_line.toLowerCase();
+
+    if (lower.includes('creature')) types.push('creature');
+    if (lower.includes('artifact')) types.push('artifact');
+    if (lower.includes('enchantment')) types.push('enchantment');
+    if (lower.includes('planeswalker')) types.push('planeswalker');
+    if (lower.includes('instant')) types.push('instant');
+    if (lower.includes('sorcery')) types.push('sorcery');
+    if (lower.includes('battle')) types.push('battle');
+    if (lower.includes('land')) types.push('land');
+
+    return types;
+}
+
+/**
+ * Run sample Portent reveals and display them
+ */
+export function runSampleReveals() {
+    const config = getDeckConfig();
+    const cardData = config.cardData;
+
+    if (!cardData || !cardData.cardsByName || Object.keys(cardData.cardsByName).length === 0) {
+        document.getElementById('portent-reveals-display').innerHTML = '<p style="color: var(--text-dim);">Import a decklist to see sample reveals</p>';
+        return;
+    }
+
+    // Get number of simulations from input (no cap)
+    const countInput = document.getElementById('portent-sample-count');
+    const numSims = Math.max(1, parseInt(countInput?.value) || 10);
+
+    // Build deck array with full card objects
+    const deck = [];
+    Object.values(cardData.cardsByName).forEach(card => {
+        const types = extractCardTypes(card);
+        for (let i = 0; i < card.count; i++) {
+            deck.push({ name: card.name, types, type_line: card.type_line });
+        }
+    });
+
+    // Run simulations
+    let revealsHTML = '';
+    let freeSpellCount = 0;
+    const typeDistribution = new Array(9).fill(0); // Track 0-8 types
+    let totalTypesExiled = 0;
+
+    for (let i = 0; i < numSims; i++) {
+        // Fisher-Yates shuffle
+        const shuffled = [...deck];
+        for (let j = shuffled.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
+        }
+
+        // Reveal X cards (same as Portent would reveal)
+        const revealed = shuffled.slice(0, config.x);
+
+        // Analyze revealed cards - count unique types
+        const typesRevealed = new Set();
+        revealed.forEach(card => {
+            card.types.forEach(type => typesRevealed.add(type));
+        });
+
+        const numTypes = typesRevealed.size;
+        const freeSpell = numTypes >= CONFIG.FREE_SPELL_THRESHOLD;
+        if (freeSpell) freeSpellCount++;
+        typeDistribution[numTypes]++;
+        totalTypesExiled += numTypes;
+
+        // Build HTML for this reveal
+        revealsHTML += `<div class="sample-reveal ${freeSpell ? 'free-spell' : 'whiff'}">`;
+        revealsHTML += `<div><strong>Reveal ${i + 1} (X=${config.x}):</strong></div>`;
+        revealsHTML += '<div style="margin: 8px 0;">';
+
+        revealed.forEach(card => {
+            const primaryType = card.types[0] || 'land';
+            const isDual = card.types.length > 1;
+            revealsHTML += `<span class="reveal-card ${primaryType} ${isDual ? 'dual' : ''}" title="${card.type_line}">${card.name}</span>`;
+        });
+
+        revealsHTML += '</div>';
+        revealsHTML += `<div class="reveal-summary ${freeSpell ? 'free-spell' : 'whiff'}">`;
+        revealsHTML += `<strong>${freeSpell ? '✓ FREE SPELL!' : '✗ No free spell'}</strong> - `;
+        revealsHTML += `${numTypes} type${numTypes !== 1 ? 's' : ''} exiled: `;
+
+        // Color-code each type name
+        const typeColors = {
+            creature: '#22c55e',
+            sorcery: '#ef4444',
+            instant: '#3b82f6',
+            artifact: '#a8a29e',
+            enchantment: '#a855f7',
+            planeswalker: '#f59e0b',
+            battle: '#ec4899',
+            land: '#92867d'
+        };
+
+        const sortedTypes = Array.from(typesRevealed).sort();
+        revealsHTML += sortedTypes.map(type => {
+            const color = typeColors[type] || '#c084fc';
+            return `<span style="color: ${color}; font-weight: 600;">${type}</span>`;
+        }).join(', ');
+
+        revealsHTML += '</div></div>';
+    }
+
+    // Calculate average types exiled
+    const avgTypesExiled = (totalTypesExiled / numSims).toFixed(2);
+
+    // Build type distribution chart
+    let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
+    distributionHTML += '<h4 style="margin-top: 0;">Type Distribution:</h4>';
+    distributionHTML += '<pre style="font-family: monospace; font-size: 0.9em; margin: 0;">';
+
+    for (let numTypes = 0; numTypes <= 8; numTypes++) {
+        const count = typeDistribution[numTypes];
+        const pct = (count / numSims * 100).toFixed(2);
+        const barLength = Math.round(pct / 2);
+        const bar = '█'.repeat(barLength);
+        const marker = numTypes >= CONFIG.FREE_SPELL_THRESHOLD ? ' ← FREE SPELL' : '';
+        const typeLabel = numTypes === 1 ? 'type ' : 'types';
+        distributionHTML += `${numTypes} ${typeLabel}: ${pct.padStart(6)}% ${bar}${marker}\n`;
+    }
+
+    distributionHTML += '</pre>';
+    distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
+    distributionHTML += `<strong>Sample Result:</strong> ${freeSpellCount}/${numSims} reveals = ${((freeSpellCount / numSims) * 100).toFixed(1)}% chance of free spell<br>`;
+    distributionHTML += `<strong>Average types exiled:</strong> ${avgTypesExiled}`;
+    distributionHTML += '</div></div>';
+
+    // Make reveals collapsible
+    const revealsSectionHTML = `
+        <details open style="margin-top: var(--spacing-md);">
+            <summary style="cursor: pointer; padding: var(--spacing-sm); background: var(--panel-bg-alt); border-radius: var(--radius-md); font-weight: bold;">
+                Show/Hide Individual Reveals (${numSims} simulations)
+            </summary>
+            <div style="max-height: 400px; overflow-y: auto; margin-top: var(--spacing-sm);">
+                ${revealsHTML}
+            </div>
+        </details>
+    `;
+
+    document.getElementById('portent-reveals-display').innerHTML = distributionHTML + revealsSectionHTML;
 }
 
 /**
@@ -311,7 +576,13 @@ export function updateUI() {
     }
 
     updateChart(config, results);
+    updateStats(config, results);
     updateTable(config, results);
+
+    // Draw initial sample reveals if we have card data
+    if (config.cardData && config.cardData.cardsByName && Object.keys(config.cardData.cardsByName).length > 0) {
+        runSampleReveals();
+    }
 }
 
 /**

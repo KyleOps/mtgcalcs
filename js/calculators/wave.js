@@ -177,7 +177,7 @@ function updateChart(config, results) {
                         tension: 0.3,
                         pointRadius: xValues.map(x => x === config.x ? 8 : 4),
                         pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#38bdf8'),
-                        yAxisID: 'yPerms'
+                        yAxisID: 'y'
                     },
                     {
                         label: 'Cards Revealed',
@@ -188,7 +188,7 @@ function updateChart(config, results) {
                         tension: 0.3,
                         pointRadius: xValues.map(x => x === config.x ? 8 : 4),
                         pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#22c55e'),
-                        yAxisID: 'yCards'
+                        yAxisID: 'y'
                     }
                 ]
             },
@@ -215,21 +215,15 @@ function updateChart(config, results) {
                     }
                 },
                 scales: {
-                    yPerms: {
+                    y: {
                         type: 'linear',
-                        position: 'left',
                         beginAtZero: true,
-                        title: { display: true, text: 'Expected Permanents', color: '#38bdf8' },
+                        title: { display: true, text: 'Count', color: '#38bdf8' },
                         grid: { color: 'rgba(14, 165, 233, 0.2)' },
-                        ticks: { color: '#38bdf8' }
-                    },
-                    yCards: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        title: { display: true, text: 'Cards Revealed', color: '#22c55e' },
-                        grid: { drawOnChartArea: false },
-                        ticks: { color: '#22c55e' }
+                        ticks: {
+                            color: '#38bdf8',
+                            stepSize: 1 // Whole numbers only
+                        }
                     },
                     x: {
                         grid: { color: 'rgba(14, 165, 233, 0.2)' },
@@ -297,6 +291,71 @@ function updateTable(config, results) {
 }
 
 /**
+ * Update stats panel with current X analysis
+ * @param {Object} config - Deck configuration
+ * @param {Object} results - Calculation results
+ */
+function updateStats(config, results) {
+    const statsPanel = document.getElementById('wave-stats');
+    const currentResult = results[config.x];
+
+    if (statsPanel && currentResult) {
+        const efficiency = (currentResult.expectedPermanents / currentResult.cardsRevealed) * 100;
+        const totalPerms = config.cmcCounts.lands + config.cmcCounts.cmc0 +
+                          config.cmcCounts.cmc2 + config.cmcCounts.cmc3 +
+                          config.cmcCounts.cmc4 + config.cmcCounts.cmc5 +
+                          config.cmcCounts.cmc6;
+        const permPercent = (totalPerms / config.deckSize) * 100;
+
+        // Create interpretation message
+        let interpretation = '';
+        if (efficiency >= 70) {
+            interpretation = `<strong style="color: #22c55e;">Excellent!</strong> Very efficient conversion rate.`;
+        } else if (efficiency >= 60) {
+            interpretation = `<strong style="color: #38bdf8;">Good!</strong> Solid permanent density.`;
+        } else if (efficiency >= 50) {
+            interpretation = `<strong style="color: #f59e0b;">Decent.</strong> Consider adding more permanents.`;
+        } else {
+            interpretation = `<strong style="color: #dc2626;">Low efficiency.</strong> Too many instants/sorceries for Wave.`;
+        }
+
+        statsPanel.innerHTML = `
+            <h3>🌊 Genesis Wave X=${config.x} Analysis</h3>
+            <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Cards Revealed</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: var(--text-light);">${currentResult.cardsRevealed}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">at X=${config.x}</div>
+                </div>
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Expected Permanents</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: #38bdf8;">${formatNumber(currentResult.expectedPermanents, 1)}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">played for free</div>
+                </div>
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Efficiency</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: #22c55e;">${formatNumber(efficiency, 1)}%</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">hits are permanents</div>
+                </div>
+                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
+                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Deck Composition</div>
+                    <div style="font-size: 1.5em; font-weight: bold; color: #f59e0b;">${totalPerms}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.85em;">${formatNumber(permPercent, 0)}% permanents</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px; padding: 12px; background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px;">
+                <div style="margin-bottom: 8px;">${interpretation}</div>
+                <div style="color: var(--text-secondary); font-size: 0.9em;">
+                    • Average ${formatNumber(currentResult.expectedPermanents, 1)} permanents per cast<br>
+                    • Reveals ${currentResult.cardsRevealed} cards (${formatNumber((currentResult.cardsRevealed / config.deckSize) * 100, 1)}% of deck)
+                </div>
+            </div>
+        `;
+    }
+}
+
+/**
  * Update comparison with Primal Surge
  * @param {Object} config - Deck configuration
  * @param {Object} results - Calculation results
@@ -359,6 +418,7 @@ export function updateUI() {
     }
 
     updateChart(config, results);
+    updateStats(config, results);
     updateTable(config, results);
     updateComparison(config, results);
 }

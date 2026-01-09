@@ -76,9 +76,13 @@ function simulateDiscoverChain(deck, discoverCMC, offset = 0, depth = 0) {
 /**
  * Simulate discover for a given creature CMC using actual card data
  * Returns detailed stats about the discover trigger
+ * @param {Array} cardDetails - Full card details array
+ * @param {number} creatureCMC - CMC of the creature being cast
+ * @param {number} lands - Number of lands in deck
+ * @param {Object} castCreature - The creature being cast (to exclude from pool)
  */
-function simulateDiscoverForCMC(cardDetails, creatureCMC, lands) {
-    const cacheKey = `${creatureCMC}-${cardDetails.length}-${lands}`;
+function simulateDiscoverForCMC(cardDetails, creatureCMC, lands, castCreature = null) {
+    const cacheKey = `${creatureCMC}-${cardDetails.length}-${lands}-${castCreature ? castCreature.name : 'none'}`;
     const cached = simulationCache.get(cacheKey);
     if (cached) return cached;
 
@@ -91,10 +95,22 @@ function simulateDiscoverForCMC(cardDetails, creatureCMC, lands) {
     }
 
     // Add all non-land cards from cardDetails
+    // Exclude the creature being cast if it's a power 5+ creature
+    let excludedCreature = false;
     cardDetails.forEach(card => {
+        // Skip the first instance of the creature being cast
+        if (!excludedCreature && castCreature &&
+            card.name === castCreature.name &&
+            card.cmc === castCreature.cmc &&
+            card.isPower5Plus) {
+            excludedCreature = true;
+            return; // Skip this card
+        }
+
         baseDeck.push({
             cmc: card.cmc,
-            isPower5Plus: card.isPower5Plus
+            isPower5Plus: card.isPower5Plus,
+            name: card.name
         });
     });
 
@@ -126,9 +142,26 @@ function simulateDiscoverForCMC(cardDetails, creatureCMC, lands) {
     const avgSpellCMC = successfulDiscoveries > 0 ? totalSpellCMC / successfulDiscoveries : 0;
     const avgFreeMana = totalFreeMana / CONFIG.ITERATIONS;
 
-    // Count castable cards and power 5+ in range
-    const castableCards = cardDetails.filter(c => c.cmc <= creatureCMC).length;
-    const power5PlusInRange = cardDetails.filter(c => c.cmc <= creatureCMC && c.isPower5Plus).length;
+    // Count castable cards and power 5+ in range (excluding the cast creature if applicable)
+    let discoverableCards = cardDetails.filter(c => c.cmc <= creatureCMC);
+
+    // If we're casting a specific creature, exclude it from the pool
+    if (castCreature && castCreature.isPower5Plus) {
+        const castIndex = discoverableCards.findIndex(c =>
+            c.name === castCreature.name &&
+            c.cmc === castCreature.cmc &&
+            c.isPower5Plus
+        );
+        if (castIndex !== -1) {
+            discoverableCards = [
+                ...discoverableCards.slice(0, castIndex),
+                ...discoverableCards.slice(castIndex + 1)
+            ];
+        }
+    }
+
+    const castableCards = discoverableCards.length;
+    const power5PlusInRange = discoverableCards.filter(c => c.isPower5Plus).length;
 
     const result = {
         avgSpellCMC: avgSpellCMC,
@@ -136,7 +169,8 @@ function simulateDiscoverForCMC(cardDetails, creatureCMC, lands) {
         avgSpellsPerTrigger: avgSpellsPerTrigger,
         multiDiscoverRate: multiDiscoverCount / CONFIG.ITERATIONS,
         castableCards: castableCards,
-        power5PlusInRange: power5PlusInRange
+        power5PlusInRange: power5PlusInRange,
+        discoverableCards: discoverableCards // Include the actual card list
     };
 
     simulationCache.set(cacheKey, result);
@@ -164,11 +198,20 @@ export function getDeckConfig() {
     // Get current creature CMC from slider
     const creatureCMC = parseInt(document.getElementById('vortex-cmcValue')?.value) || 6;
 
+    // Find power 5+ creatures at this CMC (these could be the creature being cast)
+    const power5PlusAtCMC = cardDetails.filter(c => c.cmc === creatureCMC && c.isPower5Plus);
+
+    // If there's exactly one power 5+ creature at this CMC, use it as the cast creature
+    // Otherwise, we'll simulate as if we're casting a generic power 5+ creature at this CMC
+    const castCreature = power5PlusAtCMC.length > 0 ? power5PlusAtCMC[0] : null;
+
     return {
         cardDetails,
         lands,
         creaturesPower5Plus,
         creatureCMC,
+        castCreature,
+        power5PlusAtCMC, // All power 5+ creatures at this CMC
         deckSize: cardDetails.length + lands
     };
 }
@@ -187,7 +230,11 @@ export function calculate() {
 
     // Calculate for each CMC in range
     CONFIG.CMC_RANGE.forEach(cmc => {
-        const stats = simulateDiscoverForCMC(config.cardDetails, cmc, config.lands);
+        // Find if there's a power 5+ creature at this CMC to exclude from the pool
+        const power5PlusAtThisCMC = config.cardDetails.filter(c => c.cmc === cmc && c.isPower5Plus);
+        const creatureToExclude = power5PlusAtThisCMC.length > 0 ? power5PlusAtThisCMC[0] : null;
+
+        const stats = simulateDiscoverForCMC(config.cardDetails, cmc, config.lands, creatureToExclude);
         results[cmc] = {
             creatureCMC: cmc,
             ...stats
@@ -359,22 +406,44 @@ function updateStats(config, results) {
         const totalNonLands = config.cardDetails.length;
         const castablePercent = totalNonLands > 0 ? (currentResult.castableCards / totalNonLands) * 100 : 0;
 
-        // Build CMC breakdown from actual card data
-        const cmcBreakdown = {};
-        config.cardDetails.forEach(card => {
-            if (card.cmc <= config.creatureCMC) {
-                cmcBreakdown[card.cmc] = (cmcBreakdown[card.cmc] || 0) + 1;
+        // Build detailed breakdown with actual card names
+        const discoverableCards = currentResult.discoverableCards || [];
+
+        // Group by CMC
+        const cmcGroups = {};
+        discoverableCards.forEach(card => {
+            if (!cmcGroups[card.cmc]) {
+                cmcGroups[card.cmc] = [];
             }
+            cmcGroups[card.cmc].push(card);
         });
 
-        const cmcRanges = [];
-        Object.keys(cmcBreakdown).sort((a, b) => a - b).forEach(cmc => {
-            cmcRanges.push(`${cmcBreakdown[cmc]}×${cmc}CMC`);
-        });
+        // Build breakdown HTML
+        let castableCMCBreakdown = '';
+        if (Object.keys(cmcGroups).length > 0) {
+            const cmcSections = [];
+            Object.keys(cmcGroups).sort((a, b) => Number(a) - Number(b)).forEach(cmc => {
+                const cards = cmcGroups[cmc];
+                const power5Plus = cards.filter(c => c.isPower5Plus);
+                const regularCards = cards.filter(c => !c.isPower5Plus);
 
-        const castableCMCBreakdown = cmcRanges.length > 0
-            ? `<br><small style="color: var(--text-dim);">(${cmcRanges.join(', ')})</small>`
-            : '';
+                let section = `<strong>${cmc} CMC (${cards.length} cards)</strong>:`;
+
+                if (power5Plus.length > 0) {
+                    const names = power5Plus.map(c => c.name).join(', ');
+                    section += `<br>&nbsp;&nbsp;⚡ <span style="color: #c084fc;">Chain: ${names}</span>`;
+                }
+
+                if (regularCards.length > 0) {
+                    const names = regularCards.map(c => c.name).join(', ');
+                    section += `<br>&nbsp;&nbsp;• ${names}`;
+                }
+
+                cmcSections.push(section);
+            });
+
+            castableCMCBreakdown = `<br><div style="margin-top: 8px; padding-left: 8px; line-height: 1.6;">${cmcSections.join('<br>')}</div>`;
+        }
 
         // Create interpretation message
         let interpretation = '';
@@ -394,8 +463,16 @@ function updateStats(config, results) {
             ? (power5PlusInRange / currentResult.castableCards) * 100
             : 0;
 
+        // Check if we're excluding a creature from the pool
+        const excludedCreatureNote = config.power5PlusAtCMC && config.power5PlusAtCMC.length > 0
+            ? `<div style="margin-bottom: 12px; padding: 8px; background: rgba(192, 132, 252, 0.1); border-left: 3px solid #c084fc; border-radius: 4px; font-size: 0.9em;">
+                ⚡ Casting <strong>${config.power5PlusAtCMC[0].name}</strong> - excluded from discover pool
+               </div>`
+            : '';
+
         statsPanel.innerHTML = `
             <h3>🌀 Discover ${config.creatureCMC} Analysis</h3>
+            ${excludedCreatureNote}
             <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                 <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
                     <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Discover Pool</div>

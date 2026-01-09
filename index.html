@@ -18,6 +18,7 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/rashmi-theme.css">
     <link rel="stylesheet" href="css/mobile.css">
     <link rel="stylesheet" href="css/ux-enhancements.css">
 </head>
@@ -92,7 +93,44 @@
             </div>
         </section>
 
-        <!-- Tab Navigation -->
+        <!-- Calculator Selector Dropdown (Mobile) -->
+        <div class="calculator-selector" id="calculator-selector" role="navigation" aria-label="Calculator selection">
+            <button class="selector-button" id="selector-button" aria-haspopup="true" aria-expanded="false">
+                <div class="selector-current">
+                    <span class="selector-icon">⚡</span>
+                    <span class="selector-name">Portent of Calamity</span>
+                </div>
+                <span class="selector-arrow">▼</span>
+            </button>
+            <div class="selector-dropdown" id="selector-dropdown" role="menu">
+                <div class="selector-option active" data-tab="portent" role="menuitem">
+                    <span class="selector-option-icon">⚡</span>
+                    <span>Portent of Calamity</span>
+                </div>
+                <div class="selector-option" data-tab="surge" role="menuitem">
+                    <span class="selector-option-icon">🌿</span>
+                    <span>Primal Surge</span>
+                </div>
+                <div class="selector-option" data-tab="wave" role="menuitem">
+                    <span class="selector-option-icon">🌊</span>
+                    <span>Genesis Wave</span>
+                </div>
+                <div class="selector-option" data-tab="vortex" role="menuitem">
+                    <span class="selector-option-icon">🌀</span>
+                    <span>Monstrous Vortex</span>
+                </div>
+                <div class="selector-option" data-tab="rashmi" role="menuitem">
+                    <span class="selector-option-icon">🌌</span>
+                    <span>Rashmi</span>
+                </div>
+                <div class="selector-option" data-tab="lands" role="menuitem">
+                    <span class="selector-option-icon">🏔️</span>
+                    <span>Land Drops</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation (Desktop) -->
         <nav class="tab-nav" role="navigation" aria-label="Calculator selection">
             <button class="tab-button portent active" data-tab="portent" aria-pressed="true">
                 ⚡ Portent of Calamity
@@ -108,6 +146,9 @@
             </button>
             <button class="tab-button lands" data-tab="lands" aria-pressed="false">
                 🏔️ Land Drops
+            </button>
+            <button class="tab-button rashmi" data-tab="rashmi" aria-pressed="false">
+                🌌 Rashmi
             </button>
         </nav>
 
@@ -136,6 +177,24 @@
                     <div class="chart-legend">
                         <span class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> P(Free Spell) %</span>
                         <span class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> Expected Cards to Hand</span>
+                    </div>
+                </section>
+
+                <section class="panel" id="portent-stats" aria-label="Current X analysis">
+                    <!-- Analysis content will be inserted here -->
+                </section>
+
+                <section class="panel" id="portent-sample-reveals" aria-label="Sample reveals">
+                    <h2>🎴 Sample Portent Reveals</h2>
+                    <div style="display: flex; gap: var(--spacing-md); align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                        <label for="portent-sample-count" style="color: var(--text-secondary);">Simulations:</label>
+                        <input type="number" id="portent-sample-count" min="1" max="10000" value="10"
+                               style="width: 100px; padding: 8px; background: var(--panel-bg-alt); border: 1px solid var(--accent); border-radius: var(--radius-md); color: var(--text-light); text-align: center;">
+                        <button id="portent-draw-reveals-btn" class="import-btn">Run Simulations</button>
+                        <span style="color: var(--text-dim); font-size: 0.85em;">(1-10000)</span>
+                    </div>
+                    <div id="portent-reveals-display">
+                        <!-- Sample reveals will be displayed here -->
                     </div>
                 </section>
 
@@ -202,6 +261,10 @@
                         <span class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> Expected Permanents Played</span>
                         <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Total Cards Revealed</span>
                     </div>
+                </section>
+
+                <section class="panel" id="wave-stats" aria-label="Current X analysis">
+                    <!-- Analysis content will be inserted here -->
                 </section>
 
                 <section class="panel" aria-label="X value comparison">
@@ -298,6 +361,66 @@
                     <h2>🔍 Land Drop Statistics</h2>
                     <div class="table-wrapper">
                         <table class="comparison-table" id="lands-statsTable">
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- RASHMI TAB -->
+        <div id="rashmi-tab" class="tab-content" role="tabpanel" aria-labelledby="rashmi">
+            <h1>🌌 Rashmi, Eternities Crafter Calculator</h1>
+            <p class="card-text">"The simic phyrexian arena"</p>
+
+            <div class="main-grid single-column">
+                <section class="panel" id="rashmi-import-warning" aria-label="Import required notice">
+                    <h2>⚠️ Import Required</h2>
+                    <p style="color: var(--text-secondary); margin: 0;">
+                        This calculator requires decklist import to work. Please use the
+                        <strong style="color: var(--text-light);">📚 Deck Configuration</strong> panel above to import your decklist.
+                        The import will automatically detect CMC distribution for your non-land spells.
+                    </p>
+                </section>
+
+                <section class="panel" id="rashmi-stats" aria-label="Configuration">
+                    <h2>⚙️ Calculation Settings</h2>
+                    <div class="input-group">
+                        <label for="rashmi-cmcValue">CMC of spell you're casting</label>
+                        <div class="x-slider-row">
+                            <input type="range" id="rashmi-cmcSlider" value="3" min="1" max="10" step="1" aria-label="Cast CMC slider">
+                            <input type="number" id="rashmi-cmcValue" value="3" min="1" max="15" class="x-number" aria-label="Cast CMC number input">
+                        </div>
+                    </div>
+                    <div class="input-group" style="margin-top: var(--spacing-md);">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="rashmi-exclude-x" style="width: auto; cursor: pointer;">
+                            <span>Exclude X spells from "free spell" calculation</span>
+                        </label>
+                        <small style="color: var(--text-dim); display: block; margin-top: 4px; margin-left: 24px;">
+                            When revealed from library, X=0, so X spells can't be cast for free with Rashmi
+                        </small>
+                    </div>
+                </section>
+                
+                <section class="panel" aria-label="Probability chart">
+                    <h2>📈 Free Spell Probability vs Cast CMC</h2>
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="rashmi-chart" role="img" aria-label="Rashmi probability chart"></canvas>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> P(Free Spell) %</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #3b82f6;"></span> Expected Free CMC</span>
+                    </div>
+                </section>
+
+                <section class="panel" id="rashmi-breakdown" aria-label="CMC distribution">
+                </section>
+
+
+                <section class="panel" aria-label="CMC comparison">
+                    <h2>🔍 Cast CMC Comparison</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="rashmi-comparisonTable">
                         </table>
                     </div>
                 </section>

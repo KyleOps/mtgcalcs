@@ -1,0 +1,158 @@
+/* ==================== RASHMI THEME ADDITIONS ==================== */
+
+/* Tab Button */
+.tab-button.rashmi {
+    border-color: var(--rashmi-accent);
+    color: var(--rashmi-primary);
+}
+
+.tab-button.rashmi:hover,
+.tab-button.rashmi.active {
+    background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+    color: var(--text-light);
+    box-shadow: 0 4px 12px var(--rashmi-accent);
+    transform: translateY(-2px);
+}
+
+/* Panels */
+.theme-rashmi .panel {
+    border: 1px solid var(--rashmi-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(6, 182, 212, 0.1);
+}
+
+/* Inputs */
+.theme-rashmi .input-group input,
+.theme-rashmi .input-group textarea {
+    border: 1px solid var(--rashmi-border);
+}
+
+.theme-rashmi .input-group input:focus,
+.theme-rashmi .input-group textarea:focus {
+    border-color: var(--rashmi-primary);
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+/* Type Grid */
+.theme-rashmi .type-input {
+    border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.theme-rashmi .type-input input {
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+/* Deck Total */
+.theme-rashmi .deck-total {
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    color: var(--rashmi-primary);
+}
+
+/* Slider */
+.theme-rashmi .x-slider-row input[type="range"] {
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.2), rgba(6, 182, 212, 0.4));
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.theme-rashmi .x-slider-row input[type="range"]::-webkit-slider-thumb {
+    background: linear-gradient(135deg, var(--rashmi-primary) 0%, #0891b2 100%);
+}
+
+.theme-rashmi .x-slider-row input[type="range"]::-moz-range-thumb {
+    background: linear-gradient(135deg, var(--rashmi-primary) 0%, #0891b2 100%);
+}
+
+/* Import Section */
+.theme-rashmi .import-section {
+    border-bottom: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.theme-rashmi .import-btn {
+    background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+    border: 1px solid rgba(6, 182, 212, 0.5);
+}
+
+.theme-rashmi .import-btn:hover {
+    background: linear-gradient(135deg, var(--rashmi-primary) 0%, #0891b2 100%);
+    box-shadow: 0 4px 12px var(--rashmi-accent);
+}
+
+.theme-rashmi .import-status.success {
+    color: var(--rashmi-secondary);
+}
+
+.theme-rashmi .import-status.loading {
+    color: var(--rashmi-primary);
+}
+
+.theme-rashmi .import-progress-bar {
+    background: linear-gradient(90deg, var(--rashmi-primary), var(--rashmi-secondary));
+    box-shadow: 0 0 10px var(--rashmi-accent);
+}
+
+.theme-rashmi .deck-name {
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: var(--rashmi-secondary);
+}
+
+.theme-rashmi .cors-note code {
+    background: rgba(6, 182, 212, 0.2);
+}
+
+/* Tables */
+.theme-rashmi .comparison-table th,
+.theme-rashmi .comparison-table td {
+    border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.theme-rashmi .comparison-table th {
+    background: rgba(6, 182, 212, 0.2);
+    color: var(--rashmi-primary);
+}
+
+.theme-rashmi .comparison-table .current {
+    background: rgba(6, 182, 212, 0.15);
+}
+
+.theme-rashmi .marginal-positive {
+    color: var(--rashmi-secondary);
+}
+
+/* Insight Box */
+.theme-rashmi .insight-box {
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid var(--rashmi-border);
+}
+
+.theme-rashmi .insight-box h3 {
+    color: #0891b2;
+}
+
+/* Stat Cards */
+.theme-rashmi .stat-card:hover {
+    box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+
+/* Card Type Rows */
+.theme-rashmi .card-type-row {
+    border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.theme-rashmi .card-type-row:hover {
+    box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+}
+
+.theme-rashmi .type-name-input {
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.theme-rashmi .type-name-input:focus {
+    border-color: var(--rashmi-primary);
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+/* Collapsible Panels */
+.theme-rashmi .collapse-btn:hover {
+    color: var(--rashmi-primary);
+}
