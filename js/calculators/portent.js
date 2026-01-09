@@ -17,6 +17,27 @@ const CONFIG = {
     FREE_SPELL_THRESHOLD: 4
 };
 
+const COLORS = {
+    primary: '#c084fc',
+    primaryDim: 'rgba(192, 132, 252, 0.1)',
+    danger: '#dc2626',
+    dangerDim: 'rgba(220, 38, 38, 0.1)',
+    success: '#22c55e',
+    warning: '#f59e0b',
+    white: '#fff',
+    text: '#a09090',
+    grid: 'rgba(139, 0, 0, 0.2)',
+    // Type colors
+    creature: '#22c55e',
+    sorcery: '#ef4444',
+    instant: '#3b82f6',
+    artifact: '#a8a29e',
+    enchantment: '#a855f7',
+    planeswalker: '#f59e0b',
+    battle: '#ec4899',
+    land: '#92867d'
+};
+
 let simulationCache = createCache(50);
 let lastDeckHash = '';
 let chart = null;
@@ -131,10 +152,8 @@ export function getDeckConfig() {
         battle: config.battles
     };
 
-    // Use actualCardCount if available (accounts for dual-typed cards AND already includes lands), otherwise sum
-    const deckSize = config.actualCardCount !== null && config.actualCardCount !== undefined
-        ? config.actualCardCount  // Already includes lands!
-        : Object.values(types).reduce((sum, count) => sum + count, 0);
+    // Use getDeckSize helper (handles actualCardCount properly)
+    const deckSize = DeckConfig.getDeckSize(true);
 
     // Clear cache if deck changed
     const newHash = JSON.stringify(types);
@@ -195,8 +214,7 @@ export function calculate() {
  */
 function updateChart(config, results) {
     const xValues = Object.keys(results).map(Number).sort((a, b) => a - b);
-    const prob4PlusData = xValues.map(x => results[x].prob4Plus * 100);
-    const expectedTypesData = xValues.map(x => results[x].expectedTypes);
+    const pointRadii = xValues.map(x => x === config.x ? 8 : 4);
 
     chart = createOrUpdateChart(chart, 'portent-combinedChart', {
         type: 'line',
@@ -205,62 +223,38 @@ function updateChart(config, results) {
             datasets: [
                 {
                     label: 'P(Free Spell) %',
-                    data: prob4PlusData,
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                    data: xValues.map(x => results[x].prob4Plus * 100),
+                    borderColor: COLORS.primary,
+                    backgroundColor: COLORS.primaryDim,
                     fill: false,
                     tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
+                    pointRadius: pointRadii,
+                    pointBackgroundColor: xValues.map(x => x === config.x ? COLORS.white : COLORS.primary),
                     yAxisID: 'yProb'
                 },
                 {
                     label: 'Types Exiled',
-                    data: expectedTypesData,
-                    borderColor: '#dc2626',
-                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    data: xValues.map(x => results[x].expectedTypes),
+                    borderColor: COLORS.danger,
+                    backgroundColor: COLORS.dangerDim,
                     fill: false,
                     tension: 0.3,
-                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
+                    pointRadius: pointRadii,
+                    pointBackgroundColor: xValues.map(x => x === config.x ? COLORS.white : COLORS.danger),
                     yAxisID: 'yTypes'
                 }
             ]
         },
         options: {
             scales: {
-                yProb: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
-                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                    ticks: { color: '#c084fc' }
-                },
-                yTypes: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Types Exiled', color: '#dc2626' },
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#dc2626' }
-                },
-                x: {
-                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                    ticks: { color: '#a09090' }
-                }
+                yProb: { type: 'linear', position: 'left', beginAtZero: true, max: 100, title: { display: true, text: 'P(Free Spell) %', color: COLORS.primary }, grid: { color: COLORS.grid }, ticks: { color: COLORS.primary } },
+                yTypes: { type: 'linear', position: 'right', beginAtZero: true, title: { display: true, text: 'Types Exiled', color: COLORS.danger }, grid: { drawOnChartArea: false }, ticks: { color: COLORS.danger } },
+                x: { grid: { color: COLORS.grid }, ticks: { color: COLORS.text } }
             },
             plugins: {
                 tooltip: {
                     callbacks: {
-                        label: ctx => {
-                            if (ctx.datasetIndex === 0) {
-                                return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
-                            } else {
-                                return `Types exiled: ${ctx.parsed.y.toFixed(2)}`;
-                            }
-                        }
+                        label: ctx => ctx.datasetIndex === 0 ? `Free spell: ${ctx.parsed.y.toFixed(1)}%` : `Types exiled: ${ctx.parsed.y.toFixed(2)}`
                     }
                 }
             }
@@ -305,6 +299,20 @@ function updateTable(config, results) {
 }
 
 /**
+ * Format marginal value comparison
+ */
+const formatMarginal = (compareResult, currentResult) => {
+    if (!compareResult) return '<span style="color: var(--text-dim);">N/A</span>';
+
+    const probDiff = (compareResult.prob4Plus - currentResult.prob4Plus) * 100;
+    const typesDiff = compareResult.expectedTypes - currentResult.expectedTypes;
+    const probColor = probDiff > 0 ? COLORS.success : COLORS.danger;
+    const typesColor = typesDiff > 0 ? COLORS.danger : COLORS.success;
+
+    return `<span style="color: ${probColor};">${probDiff >= 0 ? '+' : ''}${probDiff.toFixed(1)}%</span> free spell, <span style="color: ${typesColor};">${typesDiff >= 0 ? '+' : ''}${formatNumber(typesDiff, 2)}</span> types exiled`;
+};
+
+/**
  * Update stats panel with current X analysis
  * @param {Object} config - Deck configuration
  * @param {Object} results - Calculation results
@@ -314,74 +322,21 @@ function updateStats(config, results) {
     const currentResult = results[config.x];
 
     if (statsPanel && currentResult) {
-        // Marginal value analysis (X+1 vs X-1)
-        const nextX = results[config.x + 1];
-        const prevX = results[config.x - 1];
-
-        let marginalUp = '';
-        let marginalDown = '';
-
-        if (nextX) {
-            const probDiff = (nextX.prob4Plus - currentResult.prob4Plus) * 100;
-            const typesDiff = nextX.expectedTypes - currentResult.expectedTypes;
-            const probColor = probDiff > 0 ? '#22c55e' : '#dc2626';
-            const typesColor = typesDiff > 0 ? '#dc2626' : '#22c55e';
-            marginalUp = `<span style="color: ${probColor};">${probDiff >= 0 ? '+' : ''}${probDiff.toFixed(1)}%</span> free spell, <span style="color: ${typesColor};">${typesDiff >= 0 ? '+' : ''}${formatNumber(typesDiff, 2)}</span> types exiled`;
-        } else {
-            marginalUp = '<span style="color: var(--text-dim);">N/A</span>';
-        }
-
-        if (prevX) {
-            const probDiff = (prevX.prob4Plus - currentResult.prob4Plus) * 100;
-            const typesDiff = prevX.expectedTypes - currentResult.expectedTypes;
-            const probColor = probDiff > 0 ? '#22c55e' : '#dc2626';
-            const typesColor = typesDiff > 0 ? '#dc2626' : '#22c55e';
-            marginalDown = `<span style="color: ${probColor};">${probDiff >= 0 ? '+' : ''}${probDiff.toFixed(1)}%</span> free spell, <span style="color: ${typesColor};">${typesDiff >= 0 ? '+' : ''}${formatNumber(typesDiff, 2)}</span> types exiled`;
-        } else {
-            marginalDown = '<span style="color: var(--text-dim);">N/A</span>';
-        }
+        const marginalUp = formatMarginal(results[config.x + 1], currentResult);
+        const marginalDown = formatMarginal(results[config.x - 1], currentResult);
 
         // Calculate expected types hit
         const expectedTypes = currentResult.expectedTypes || currentResult.typeDist.reduce((sum, p, i) => sum + p * i, 0);
 
         // Create interpretation message
-        let interpretation = '';
-        if (currentResult.prob4Plus >= 0.90) {
-            interpretation = `<strong style="color: #c084fc;">Excellent!</strong> Very high chance to get a free spell.`;
-        } else if (currentResult.prob4Plus >= 0.75) {
-            interpretation = `<strong style="color: #9333ea;">Good!</strong> Reliable free spell trigger.`;
-        } else if (currentResult.prob4Plus >= 0.60) {
-            interpretation = `<strong style="color: #f59e0b;">Decent.</strong> Moderate success rate.`;
-        } else {
-            interpretation = `<strong style="color: #dc2626;">Low probability.</strong> Consider more card type diversity.`;
-        }
+        const prob = currentResult.prob4Plus;
+        const [message, color] = prob >= 0.90 ? ['Excellent!', COLORS.primary] : prob >= 0.75 ? ['Good!', '#9333ea'] : prob >= 0.60 ? ['Decent.', COLORS.warning] : ['Low probability.', COLORS.danger];
+        const advice = prob < 0.60 ? ' Consider more card type diversity.' : ' Very high chance to get a free spell.';
+        const interpretation = `<strong style="color: ${color};">${message}</strong>${prob >= 0.75 ? ' Reliable free spell trigger.' : prob >= 0.60 ? ' Moderate success rate.' : advice}<br><small style="color: var(--text-secondary);">Average ${formatNumber(expectedTypes, 1)} types exiled per cast</small>`;
 
-        interpretation += `<br><small style="color: var(--text-secondary);">Average ${formatNumber(expectedTypes, 1)} types exiled per cast</small>`;
+        const s = { card: 'background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;' };
 
-        statsPanel.innerHTML = `
-            <h3>⚡ Portent of Calamity X=${config.x} Analysis</h3>
-            <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Free Spell Chance</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: #c084fc;">${formatPercentage(currentResult.prob4Plus)}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">4+ types revealed</div>
-                </div>
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Types Exiled</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: #dc2626;">${formatNumber(expectedTypes, 1)}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">avg per cast (1 per type)</div>
-                </div>
-            </div>
-
-            <div style="margin-top: 16px; padding: 12px; background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px;">
-                <div style="margin-bottom: 8px;">${interpretation}</div>
-                <div style="color: var(--text-secondary); font-size: 0.9em;">
-                    <strong>Marginal Value:</strong><br>
-                    • X=${config.x + 1}: ${marginalUp}<br>
-                    • X=${config.x - 1}: ${marginalDown}
-                </div>
-            </div>
-        `;
+        statsPanel.innerHTML = `<h3>⚡ Portent of Calamity X=${config.x} Analysis</h3><div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"><div class="stat-card" style="${s.card}"><div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Free Spell Chance</div><div style="font-size: 1.5em; font-weight: bold; color: ${COLORS.primary};">${formatPercentage(currentResult.prob4Plus)}</div><div style="color: var(--text-secondary); font-size: 0.85em;">4+ types revealed</div></div><div class="stat-card" style="${s.card}"><div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Types Exiled</div><div style="font-size: 1.5em; font-weight: bold; color: ${COLORS.danger};">${formatNumber(expectedTypes, 1)}</div><div style="color: var(--text-secondary); font-size: 0.85em;">avg per cast (1 per type)</div></div></div><div style="margin-top: 16px; padding: 12px; background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px;"><div style="margin-bottom: 8px;">${interpretation}</div><div style="color: var(--text-secondary); font-size: 0.9em;"><strong>Marginal Value:</strong><br>• X=${config.x + 1}: ${marginalUp}<br>• X=${config.x - 1}: ${marginalDown}</div></div>`;
     }
 }
 
@@ -389,19 +344,9 @@ function updateStats(config, results) {
  * Extract types from a card using same logic as simulation
  */
 function extractCardTypes(card) {
-    const types = [];
     const lower = (card.type_line || '').toLowerCase();
-
-    if (lower.includes('creature')) types.push('creature');
-    if (lower.includes('artifact')) types.push('artifact');
-    if (lower.includes('enchantment')) types.push('enchantment');
-    if (lower.includes('planeswalker')) types.push('planeswalker');
-    if (lower.includes('instant')) types.push('instant');
-    if (lower.includes('sorcery')) types.push('sorcery');
-    if (lower.includes('battle')) types.push('battle');
-    if (lower.includes('land')) types.push('land');
-
-    return types;
+    return ['creature', 'artifact', 'enchantment', 'planeswalker', 'instant', 'sorcery', 'battle', 'land']
+        .filter(type => lower.includes(type));
 }
 
 /**
@@ -474,23 +419,8 @@ export function runSampleReveals() {
         revealsHTML += `<strong>${freeSpell ? '✓ FREE SPELL!' : '✗ No free spell'}</strong> - `;
         revealsHTML += `${numTypes} type${numTypes !== 1 ? 's' : ''} exiled: `;
 
-        // Color-code each type name
-        const typeColors = {
-            creature: '#22c55e',
-            sorcery: '#ef4444',
-            instant: '#3b82f6',
-            artifact: '#a8a29e',
-            enchantment: '#a855f7',
-            planeswalker: '#f59e0b',
-            battle: '#ec4899',
-            land: '#92867d'
-        };
-
         const sortedTypes = Array.from(typesRevealed).sort();
-        revealsHTML += sortedTypes.map(type => {
-            const color = typeColors[type] || '#c084fc';
-            return `<span style="color: ${color}; font-weight: 600;">${type}</span>`;
-        }).join(', ');
+        revealsHTML += sortedTypes.map(type => `<span style="color: ${COLORS[type] || COLORS.primary}; font-weight: 600;">${type}</span>`).join(', ');
 
         revealsHTML += '</div></div>';
     }

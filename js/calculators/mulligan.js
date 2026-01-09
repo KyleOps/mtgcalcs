@@ -3,7 +3,7 @@
  * Determines optimal mulligan decisions for any number of card types
  */
 
-import { drawType, drawTypeMin, drawTwoTypeMin, drawThreeTypeMin } from '../utils/hypergeometric.js';
+import { choose, drawTwoTypeMin, drawThreeTypeMin } from '../utils/hypergeometric.js';
 import { formatNumber, formatPercentage, createCache } from '../utils/simulation.js';
 import { createOrUpdateChart } from '../utils/chartHelpers.js';
 import * as DeckConfig from '../utils/deckConfig.js';
@@ -18,21 +18,6 @@ let cardTypes = [
     { id: 1, name: 'Lands', count: 36, required: 2, byTurn: 3 }
 ];
 let nextTypeId = 2;
-
-/**
- * Helper: Calculate binomial coefficient
- */
-function choose(n, k) {
-    if (k < 0 || k > n) return 0;
-    if (k === 0 || k === n) return 1;
-    k = Math.min(k, n - k);
-    let result = 1;
-    for (let i = 0; i < k; i++) {
-        result *= (n - i);
-        result /= (i + 1);
-    }
-    return result;
-}
 
 /**
  * Calculate probability of drawing specific combination of multiple types
@@ -58,14 +43,48 @@ function multiTypeProb(deckSize, typeCounts, drawn, typeDrawn) {
 }
 
 /**
+ * Calculate cumulative probability: P(at least typeDrawn[i] of each type)
+ * Optimized to use built-in hypergeometric functions for common cases
+ */
+function multiTypeProbCumulative(deckSize, typeCounts, drawn, typeDrawnMin) {
+    // Fast path for common cases
+    if (typeCounts.length === 2) {
+        return drawTwoTypeMin(deckSize, typeCounts[0], typeCounts[1], drawn, typeDrawnMin[0], typeDrawnMin[1]);
+    }
+    if (typeCounts.length === 3) {
+        return drawThreeTypeMin(deckSize, typeCounts[0], typeCounts[1], typeCounts[2], drawn, typeDrawnMin[0], typeDrawnMin[1], typeDrawnMin[2]);
+    }
+
+    // General case: enumerate all valid combinations
+    let totalProb = 0;
+    function enumerate(typeIndex, currentDrawn, remainingSlots) {
+        if (typeIndex === typeCounts.length) {
+            totalProb += multiTypeProb(deckSize, typeCounts, drawn, currentDrawn);
+            return;
+        }
+        const minForType = typeDrawnMin[typeIndex];
+        const maxForType = Math.min(typeCounts[typeIndex], remainingSlots);
+        for (let count = minForType; count <= maxForType; count++) {
+            enumerate(typeIndex + 1, [...currentDrawn, count], remainingSlots - count);
+        }
+    }
+    enumerate(0, [], drawn);
+    return totalProb;
+}
+
+/**
  * Calculate success probability for a multi-type hand
  */
-function calcMultiTypeSuccess(deckSize, types, handCounts) {
+function calcMultiTypeSuccess(deckSize, types, handCounts, onThePlay = false) {
     const cardsInDeck = deckSize - 7;
 
     // Find the maximum turn we need to satisfy
     const maxTurn = Math.max(...types.map(t => t.byTurn));
-    const cardsToDraw = maxTurn;
+    
+    // Calculate actual draws based on Play/Draw
+    // On Draw: Turn 1 = 1 draw (Total 8 cards)
+    // On Play: Turn 1 = 0 draws (Total 7 cards), Turn 2 = 1 draw
+    const cardsToDraw = onThePlay ? Math.max(0, maxTurn - 1) : maxTurn;
 
     if (cardsToDraw === 0) {
         // Check if we already have what we need
@@ -124,7 +143,7 @@ function calcMultiTypeSuccessRecursive(deckSize, typesInDeck, cardsToDraw, needs
 /**
  * Calculate mulligan strategy for multiple card types
  */
-function mullStratMultiType(deckSize, types, penalty, freeMulligan = false) {
+function mullStratMultiType(deckSize, types, penalty, freeMulligan = false, onThePlay = false) {
     const strategy = [];
     let bestKeepProb = 0;
 
@@ -141,7 +160,7 @@ function mullStratMultiType(deckSize, types, penalty, freeMulligan = false) {
                 );
 
                 if (handProb > 0) {
-                    const successProb = calcMultiTypeSuccess(deckSize, types, currentCombination);
+                    const successProb = calcMultiTypeSuccess(deckSize, types, currentCombination, onThePlay);
 
                     strategy.push({
                         counts: [...currentCombination],
@@ -206,17 +225,18 @@ function mullStratMultiType(deckSize, types, penalty, freeMulligan = false) {
 /**
  * Calculate marginal benefit of adding one more card of each type
  */
-function calculateMarginalBenefits(deckSize, types, penalty, freeMulligan) {
-    const baseResult = mullStratMultiType(deckSize, types, penalty, freeMulligan);
-    const baseBaseline = calculateNoMulliganSuccess(deckSize, types);
+function calculateMarginalBenefits(deckSize, types, penalty, freeMulligan, onThePlay) {
+    const baseResult = mullStratMultiType(deckSize, types, penalty, freeMulligan, onThePlay);
+    // Baseline = No Mulligan, just natural draw
+    const baseBaseline = calculateNoMulliganSuccess(deckSize, types, onThePlay);
     const benefits = [];
 
     types.forEach((type, index) => {
         const modifiedTypes = types.map((t, i) =>
             i === index ? { ...t, count: t.count + 1 } : t
         );
-        const modifiedResult = mullStratMultiType(deckSize + 1, modifiedTypes, penalty, freeMulligan);
-        const modifiedBaseline = calculateNoMulliganSuccess(deckSize + 1, modifiedTypes);
+        const modifiedResult = mullStratMultiType(deckSize + 1, modifiedTypes, penalty, freeMulligan, onThePlay);
+        const modifiedBaseline = calculateNoMulliganSuccess(deckSize + 1, modifiedTypes, onThePlay);
         
         benefits.push({
             overall: modifiedResult.expectedSuccess - baseResult.expectedSuccess,
@@ -287,7 +307,7 @@ function calculateAvgMulligans(strategy, penalty, freeMulligan) {
 /**
  * Calculate success rate without any mulligans (baseline)
  */
-function calculateNoMulliganSuccess(deckSize, types) {
+function calculateNoMulliganSuccess(deckSize, types, onThePlay) {
     const allHands = [];
 
     function generateHandCombinations(typeIndex, currentCombination, remainingCards) {
@@ -301,7 +321,7 @@ function calculateNoMulliganSuccess(deckSize, types) {
                 );
 
                 if (handProb > 0) {
-                    const successProb = calcMultiTypeSuccess(deckSize, types, currentCombination);
+                    const successProb = calcMultiTypeSuccess(deckSize, types, currentCombination, onThePlay);
                     allHands.push({ handProb, successProb });
                 }
             }
@@ -335,9 +355,11 @@ export function getDeckConfig() {
 
     const penalty = parseFloat(document.getElementById('mull-penalty')?.value || 0.2);
     const freeMulligan = document.getElementById('mull-free')?.checked === true;
+    const onThePlay = document.getElementById('mull-on-play')?.checked === true;
+    const confidenceThreshold = parseFloat(document.getElementById('mull-threshold')?.value || 85) / 100;
 
     // Clear cache if config changed
-    const newHash = `${deckSize}-${JSON.stringify(cardTypes)}-${penalty}-${freeMulligan}`;
+    const newHash = `${deckSize}-${JSON.stringify(cardTypes)}-${penalty}-${freeMulligan}-${onThePlay}-${confidenceThreshold}`;
     if (newHash !== lastConfigHash) {
         simulationCache.clear();
         lastConfigHash = newHash;
@@ -347,6 +369,8 @@ export function getDeckConfig() {
         deckSize,
         penalty,
         freeMulligan,
+        onThePlay,
+        confidenceThreshold,
         types: cardTypes
     };
 }
@@ -361,20 +385,20 @@ export function calculate() {
         return { config, result: null };
     }
 
-    const cacheKey = `${config.deckSize}-${JSON.stringify(config.types)}-${config.penalty}-${config.freeMulligan}`;
+    const cacheKey = `${config.deckSize}-${JSON.stringify(config.types)}-${config.penalty}-${config.freeMulligan}-${config.onThePlay}`;
     const cached = simulationCache.get(cacheKey);
-    if (cached) {
-        return { config, result: cached };
+    let result = cached;
+
+    if (!result) {
+        result = mullStratMultiType(config.deckSize, config.types, config.penalty, config.freeMulligan, config.onThePlay);
+        const mulliganStats = calculateAvgMulligans(result.strategy, config.penalty, config.freeMulligan);
+        result.avgMulligans = mulliganStats.avgMulligans;
+        result.expectedCards = mulliganStats.expectedCards;
+        result.baselineSuccess = calculateNoMulliganSuccess(config.deckSize, config.types, config.onThePlay);
+        result.marginalBenefits = calculateMarginalBenefits(config.deckSize, config.types, config.penalty, config.freeMulligan, config.onThePlay);
+        simulationCache.set(cacheKey, result);
     }
 
-    const result = mullStratMultiType(config.deckSize, config.types, config.penalty, config.freeMulligan);
-    const mulliganStats = calculateAvgMulligans(result.strategy, config.penalty, config.freeMulligan);
-    result.avgMulligans = mulliganStats.avgMulligans;
-    result.expectedCards = mulliganStats.expectedCards;
-    result.baselineSuccess = calculateNoMulliganSuccess(config.deckSize, config.types);
-    result.marginalBenefits = calculateMarginalBenefits(config.deckSize, config.types, config.penalty, config.freeMulligan);
-
-    simulationCache.set(cacheKey, result);
     return { config, result };
 }
 
@@ -385,96 +409,39 @@ function renderCardTypes() {
     const container = document.getElementById('mull-types-container');
     if (!container) return;
 
-    container.innerHTML = cardTypes.map((type, index) => `
-        <div class="card-type-row" data-type-id="${type.id}">
-            <div class="type-header">
-                <input type="text"
-                       class="type-name-input"
-                       value="${type.name}"
-                       placeholder="Type name"
-                       data-type-id="${type.id}">
-                ${cardTypes.length > 1 ? `<button class="remove-type-btn" data-type-id="${type.id}" aria-label="Remove type">✕</button>` : ''}
-            </div>
-            <div class="type-grid">
-                <div class="type-input">
-                    <label>Cards in Deck</label>
-                    <input type="number"
-                           class="type-count"
-                           value="${type.count}"
-                           min="0"
-                           data-type-id="${type.id}">
-                </div>
-                <div class="type-input">
-                    <label>Need in Hand</label>
-                    <input type="number"
-                           class="type-required"
-                           value="${type.required}"
-                           min="0"
-                           max="7"
-                           data-type-id="${type.id}">
-                </div>
-                <div class="type-input">
-                    <label>By Turn</label>
-                    <input type="number"
-                           class="type-turn"
-                           value="${type.byTurn}"
-                           min="1"
-                           max="10"
-                           data-type-id="${type.id}">
-                </div>
-            </div>
+    container.innerHTML = cardTypes.map(t => `<div class="card-type-row" data-type-id="${t.id}">
+        <div class="type-header">
+            <input type="text" class="type-name-input" value="${t.name}" placeholder="Type name" data-type-id="${t.id}">
+            ${cardTypes.length > 1 ? `<button class="remove-type-btn" data-type-id="${t.id}" aria-label="Remove type">✕</button>` : ''}
         </div>
-    `).join('');
+        <div class="type-grid">
+            <div class="type-input"><label>Cards in Deck</label><input type="number" class="type-count" value="${t.count}" min="0" data-type-id="${t.id}"></div>
+            <div class="type-input"><label>Need in Hand</label><input type="number" class="type-required" value="${t.required}" min="0" max="7" data-type-id="${t.id}"></div>
+            <div class="type-input"><label>By Turn</label><input type="number" class="type-turn" value="${t.byTurn}" min="1" max="10" data-type-id="${t.id}"></div>
+        </div>
+    </div>`).join('');
 
-    // Add event listeners
-    container.querySelectorAll('.type-name-input').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const id = parseInt(e.target.dataset.typeId);
-            const type = cardTypes.find(t => t.id === id);
-            if (type) {
-                type.name = e.target.value;
-                updateUI();
-            }
+    // Unified event handler
+    const updateType = (selector, field, parser = v => v) => {
+        container.querySelectorAll(selector).forEach(input => {
+            input.addEventListener('input', e => {
+                const type = cardTypes.find(t => t.id === parseInt(e.target.dataset.typeId));
+                if (type) {
+                    type[field] = parser(e.target.value);
+                    updateUI();
+                }
+            });
         });
-    });
+    };
 
-    container.querySelectorAll('.type-count').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const id = parseInt(e.target.dataset.typeId);
-            const type = cardTypes.find(t => t.id === id);
-            if (type) {
-                type.count = parseInt(e.target.value) || 0;
-                updateUI();
-            }
-        });
-    });
-
-    container.querySelectorAll('.type-required').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const id = parseInt(e.target.dataset.typeId);
-            const type = cardTypes.find(t => t.id === id);
-            if (type) {
-                type.required = parseInt(e.target.value) || 0;
-                updateUI();
-            }
-        });
-    });
-
-    container.querySelectorAll('.type-turn').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const id = parseInt(e.target.dataset.typeId);
-            const type = cardTypes.find(t => t.id === id);
-            if (type) {
-                type.byTurn = parseInt(e.target.value) || 1;
-                updateUI();
-            }
-        });
-    });
+    updateType('.type-name-input', 'name');
+    updateType('.type-count', 'count', v => parseInt(v) || 0);
+    updateType('.type-required', 'required', v => parseInt(v) || 0);
+    updateType('.type-turn', 'byTurn', v => parseInt(v) || 1);
 
     container.querySelectorAll('.remove-type-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = parseInt(e.target.dataset.typeId);
-            cardTypes = cardTypes.filter(t => t.id !== id);
+        btn.addEventListener('click', e => {
+            cardTypes = cardTypes.filter(t => t.id !== parseInt(e.target.dataset.typeId));
             renderCardTypes();
             updateUI();
         });
@@ -499,9 +466,18 @@ function addCardType() {
 /**
  * Update strategy table
  */
-function updateStrategyTable(config, result) {
+function updateStrategyTable(config, result, sharedData) {
     const tableEl = document.getElementById('mull-strategyTable');
     if (!tableEl) return;
+
+    const threshold = config.confidenceThreshold;
+    const useCumulative = document.getElementById('mull-cumulative')?.checked === true;
+
+    // Helper for success styling
+    const getSuccessStyle = (prob) => {
+        const meets = prob >= threshold;
+        return [meets ? '#22c55e' : (prob >= threshold * 0.8 ? '#f59e0b' : '#dc2626'), meets ? '✓' : (prob >= threshold * 0.8 ? '!' : '')];
+    };
 
     // Single Type Case - Simplified Table
     if (config.types.length === 1) {
@@ -509,12 +485,14 @@ function updateStrategyTable(config, result) {
         // Sort by count descending
         const rows = result.strategy.sort((a, b) => b.counts[0] - a.counts[0]);
 
+        const handLabel = useCumulative ? `≥ ${typeName}` : 'Hand %';
+
         let tableHTML = `
             <tr>
                 <th>${typeName} Count</th>
                 <th>Decision</th>
                 <th>Success Rate</th>
-                <th>Hand %</th>
+                <th>${handLabel}</th>
             </tr>
         `;
 
@@ -523,18 +501,18 @@ function updateStrategyTable(config, result) {
             const decision = hand.keep ? 'Keep' : 'Mulligan';
             const decisionClass = hand.keep ? 'marginal-positive' : 'marginal-negative';
             const rowClass = hand.keep ? '' : 'marginal-negative';
-            
-            // Only show rows where hand probability is relevant (>0.01%) or it's a keep
-            if (hand.handProb < 0.0001 && !hand.keep) return;
 
-            tableHTML += `
-                <tr class="${rowClass}">
-                    <td><strong>${count}</strong></td>
-                    <td class="${decisionClass}" style="font-weight:bold;">${decision}</td>
-                    <td>${formatPercentage(hand.successProb)}</td>
-                    <td style="color:var(--text-dim); font-size:0.9em;">${formatPercentage(hand.handProb)}</td>
-                </tr>
-            `;
+            // Calculate display probability
+            let displayProb = hand.handProb;
+            if (useCumulative) {
+                displayProb = multiTypeProbCumulative(config.deckSize, sharedData.typeCounts, 7, hand.counts);
+            }
+
+            // Only show rows where hand probability is relevant (>0.01%) or it's a keep
+            if (displayProb < 0.0001 && !hand.keep) return;
+
+            const [successColor, successIcon] = getSuccessStyle(hand.successProb);
+            tableHTML += `<tr class="${rowClass}"><td><strong>${count}</strong></td><td class="${decisionClass}" style="font-weight:bold;">${decision}</td><td style="color:${successColor}; font-weight:bold;">${formatPercentage(hand.successProb)} ${successIcon}</td><td style="color:var(--text-dim); font-size:0.9em;">${formatPercentage(displayProb)}</td></tr>`;
         });
         tableEl.innerHTML = tableHTML;
         return;
@@ -544,10 +522,12 @@ function updateStrategyTable(config, result) {
     const keepHands = result.strategy.filter(h => h.keep).sort((a, b) => b.successProb - a.successProb);
     const mulliganHands = result.strategy.filter(h => !h.keep).sort((a, b) => b.handProb - a.handProb);
 
+    const handLabel = useCumulative ? 'Hand % (≥)' : 'Hand %';
+
     const headerRow = `
         <tr>
             ${config.types.map(t => `<th>${t.name}</th>`).join('')}
-            <th>Hand %</th>
+            <th>${handLabel}</th>
             <th>Success %</th>
             <th>Decision</th>
         </tr>
@@ -558,6 +538,12 @@ function updateStrategyTable(config, result) {
         const rowClass = hand.keep ? '' : 'marginal-negative';
         const decisionClass = hand.keep ? 'marginal-positive' : 'marginal-negative';
 
+        // Calculate display probability
+        let displayProb = hand.handProb;
+        if (useCumulative) {
+            displayProb = multiTypeProbCumulative(config.deckSize, sharedData.typeCounts, 7, hand.counts);
+        }
+
         // Build explanation of what you need to draw
         const needs = config.types.map((type, i) => {
             const have = hand.counts[i];
@@ -566,18 +552,10 @@ function updateStrategyTable(config, result) {
             return `${need - have} more ${type.name}`;
         }).filter(x => x);
 
-        const needsText = needs.length > 0
-            ? `Need: ${needs.join(' + ')}`
-            : 'Already have everything!';
+        const needsText = needs.length > 0 ? `Need: ${needs.join(' + ')}` : 'Already have everything!';
+        const [successColor] = getSuccessStyle(hand.successProb);
 
-        return `
-            <tr class="${rowClass}" title="${needsText}">
-                ${hand.counts.map(c => `<td>${c}</td>`).join('')}
-                <td>${formatPercentage(hand.handProb)}</td>
-                <td title="${needsText}">${formatPercentage(hand.successProb)}</td>
-                <td class="${decisionClass}">${decision}</td>
-            </tr>
-        `;
+        return `<tr class="${rowClass}" title="${needsText}">${hand.counts.map(c => `<td>${c}</td>`).join('')}<td>${formatPercentage(displayProb)}</td><td title="${needsText}" style="color: ${successColor}; font-weight: bold;">${formatPercentage(hand.successProb)}</td><td class="${decisionClass}">${decision}</td></tr>`;
     };
 
     // Show top keeps and top mulligans
@@ -622,46 +600,20 @@ function calculateMulliganBreakdown(strategy, freeMulligan, bestKeepProb) {
     cumulativeKeepProb = keepProb;
 
     // Each subsequent mulligan
-    let takeProbability = mullProb; // Probability we take this mulligan
+    let takeProbability = mullProb;
     for (let i = 1; i <= 4 && takeProbability > 0.001; i++) {
-        const thisKeepProb = takeProbability * keepProb; // Probability we keep after taking this mulligan
+        const thisKeepProb = takeProbability * keepProb;
         cumulativeKeepProb += thisKeepProb;
 
-        let label;
-        let successRate;
-        let drawRate; // Probability of drawing into requirements with this mulligan's hand size
+        const isFree = i === 1 && freeMulligan;
+        const penaltyFactor = freeMulligan ? (i - 1) : i;
+        const cards = 7 - (isFree ? 0 : penaltyFactor);
+        const label = isFree ? `Mulligan ${i} - Free (see 7, keep 7)` : `Mulligan ${i} (see 7, keep ${cards})`;
+        const successRate = openingSuccess * Math.pow(1 - (1/7), isFree ? 0 : penaltyFactor);
+        const drawRate = keepProb * Math.pow(1 - (1/7), isFree ? 0 : penaltyFactor);
 
-        if (i === 1 && freeMulligan) {
-            // First mulligan is free: see 7, keep 7 - same success rate as opening hand
-            label = `Mulligan ${i} - Free (see 7, keep 7)`;
-            successRate = openingSuccess;
-            drawRate = keepProb; // Same as opening hand (7 cards)
-        } else if (freeMulligan) {
-            // Subsequent mulligans after free: see 7, keep 7-(i-1) because first was free
-            const cards = 7 - (i - 1);
-            label = `Mulligan ${i} (see 7, keep ${cards})`;
-            // Calculate penalty based on cards lost (each card lost reduces success by roughly the penalty amount)
-            successRate = openingSuccess * Math.pow(1 - (1/7), i - 1);
-            drawRate = keepProb * Math.pow(1 - (1/7), i - 1); // Decreases with fewer cards
-        } else {
-            // No free mulligan: see 7, keep 7-i
-            const cards = 7 - i;
-            label = `Mulligan ${i} (see 7, keep ${cards})`;
-            // Calculate penalty based on cards lost
-            successRate = openingSuccess * Math.pow(1 - (1/7), i);
-            drawRate = keepProb * Math.pow(1 - (1/7), i); // Decreases with fewer cards
-        }
-
-        breakdown.push({
-            label,
-            keepProbability: thisKeepProb,
-            drawRate, // Probability of hitting requirements with this hand size
-            takeProbability,
-            cumulative: cumulativeKeepProb,
-            successRate
-        });
-
-        takeProbability *= mullProb; // Next mulligan requires mulliganing again
+        breakdown.push({ label, keepProbability: thisKeepProb, drawRate, takeProbability, cumulative: cumulativeKeepProb, successRate });
+        takeProbability *= mullProb;
     }
 
     return breakdown;
@@ -670,184 +622,64 @@ function calculateMulliganBreakdown(strategy, freeMulligan, bestKeepProb) {
 /**
  * Update summary stats with clearer explanations
  */
-function updateSummary(config, result) {
+function updateSummary(config, result, sharedData) {
     const summaryEl = document.getElementById('mull-summary');
     if (!summaryEl) return;
 
-    // Calculate improvement from mulligan strategy
-    const improvement = result.expectedSuccess - result.baselineSuccess;
+    // Calculate confidence consistency using shared data
+    const confidentKeepRate = result.strategy.reduce((sum, h) =>
+        h.keep && h.successProb >= config.confidenceThreshold ? sum + h.handProb : sum, 0);
+    const confidenceConsistency = sharedData.totalKeepProb > 0 ? confidentKeepRate / sharedData.totalKeepProb : 0;
 
-    // Calculate mulligan breakdown for detail view
-    const mulliganBreakdown = calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb);
-    
-    const breakdownHTML = mulliganBreakdown.map(m => `
-        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.9em;">
-            <span style="color: var(--text-secondary);">${m.label}</span>
-            <span style="color: var(--text-light);">${formatPercentage(m.cumulative)}</span>
-        </div>
-    `).join('');
+    // Marginal benefits helper
+    const getImpact = (pct) => pct > 1.5 ? ['🔥 High Impact', '#22c55e'] : pct > 0.5 ? ['✅ Medium Impact', '#4ade80'] : pct < 0 ? ['⚠️ Negative Impact', '#ef4444'] : ['Low Impact', 'var(--text-dim)'];
 
-    summaryEl.innerHTML = `
-        <div style="text-align: center; margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(192, 132, 252, 0.1) 0%, rgba(10, 10, 18, 0) 100%); border-radius: 12px; border: 1px solid rgba(192, 132, 252, 0.2);">
-            <div style="font-size: 0.85em; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Overall Success Rate</div>
-            <div style="font-size: 3.5em; font-weight: 700; color: #c084fc; line-height: 1; text-shadow: 0 0 20px rgba(192, 132, 252, 0.3);">
-                ${formatPercentage(result.expectedSuccess)}
-            </div>
-            <div style="color: var(--text-dim); font-size: 0.9em; margin-top: 8px;">
-                (${formatPercentage(result.baselineSuccess)} without mulligans)
-            </div>
-        </div>
+    const s = { // Common styles
+        card: 'text-align:center;padding:16px;border-radius:12px',
+        label: 'font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px',
+        big: 'font-size:2.2em;font-weight:700;line-height:1',
+        sub: 'color:var(--text-dim);font-size:0.8em;margin-top:4px'
+    };
 
-        <div style="background: var(--panel-bg-alt); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-            <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.95em; line-height: 1.5;">
-                This strategy mulligans <strong>${formatNumber(result.avgMulligans, 2)}</strong> times on average, 
-                starting with an average of <strong>${formatNumber(result.expectedCards, 2)}</strong> cards.
-            </div>
-            
-            <details>
-                <summary style="cursor: pointer; color: var(--text-dim); font-size: 0.85em;">View Mulligan Breakdown</summary>
-                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
-                    ${breakdownHTML}
-                </div>
-            </details>
-        </div>
+    const marginalsHTML = result.marginalBenefits.map((b, i) => {
+        const [label, color] = getImpact(b.overall * 100);
+        return `<li style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="color:var(--text-light);font-weight:600">+1 ${config.types[i].name}</span><span style="font-size:0.85em;font-weight:bold;color:${color};background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px">${label}</span></div><div style="font-size:0.9em;color:var(--text-secondary)">Increases consistency by <strong style="color:${color}">${formatPercentage(Math.max(0, b.overall), 2)}</strong><span style="font-size:0.9em;color:var(--text-dim)"> (Natural: +${formatPercentage(Math.max(0, b.baseline), 2)})</span></div></li>`;
+    }).join('');
 
-        <div style="background: rgba(34, 197, 94, 0.05); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 16px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 0.95em; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px;">💡 Marginal Value (Impact on Overall Success)</h3>
-            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 0.9em; line-height: 1.6;">
-                ${result.marginalBenefits.map((benefit, i) => 
-                    `<li>
-                        Adding an extra <strong>${config.types[i].name}</strong>:
-                        <div style="margin-left: 8px; font-size: 0.9em;">
-                            • Overall Success: <strong style="color: #4ade80;">${formatPercentage(benefit.overall > 0 ? benefit.overall : 0, 2)}</strong><br>
-                            • Natural Draw: <strong style="color: #a09090;">${formatPercentage(benefit.baseline > 0 ? benefit.baseline : 0, 2)}</strong>
-                        </div>
-                    </li>`
-                ).join('')}
-            </ul>
-        </div>
-    `;
+    const breakdownHTML = sharedData.breakdown.map(m => `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.9em"><span style="color:var(--text-secondary)">${m.label}</span><span style="color:var(--text-light)">${formatPercentage(m.cumulative)}</span></div>`).join('');
+
+    summaryEl.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px"><div style="${s.card};background:linear-gradient(135deg,rgba(192,132,252,0.1) 0%,rgba(10,10,18,0) 100%);border:1px solid rgba(192,132,252,0.2)"><div style="${s.label}">Expected Success</div><div style="${s.big};color:#c084fc">${formatPercentage(result.expectedSuccess)}</div><div style="${s.sub}">Win rate with optimal play</div></div><div style="${s.card};background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2)"><div style="${s.label}">Confidence Check</div><div style="${s.big};color:#4ade80">${formatPercentage(confidenceConsistency)}</div><div style="${s.sub}">of kept hands meet >${formatPercentage(config.confidenceThreshold)} reqs</div></div></div><div style="background:var(--panel-bg-alt);border-radius:8px;padding:16px;margin-bottom:20px"><div style="margin-bottom:12px;color:var(--text-secondary);font-size:0.95em">This strategy suggests mulliganing <strong>${formatNumber(result.avgMulligans, 2)}</strong> times on average.</div><details><summary style="cursor:pointer;color:var(--text-dim);font-size:0.85em">View Strategy Details</summary><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color)">${breakdownHTML}</div></details></div><div style="background:rgba(255,255,255,0.02);border:1px solid var(--border-color);border-radius:8px;padding:16px"><h3 style="margin:0 0 16px 0;font-size:0.95em;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px">💡 Marginal Value Analysis</h3><ul style="margin:0;padding:0;list-style:none">${marginalsHTML}</ul></div>`;
 }
 
-
-
-
+/**
+ * Common chart options generator
+ */
+function getChartOptions(xLabel, yLabel = 'Probability', title = null) {
+    return {
+        plugins: {
+            ...(title && { title: { display: true, text: title, color: '#a09090', font: { size: 14, weight: 'normal' }, padding: { bottom: 15 } } }),
+            legend: { display: true, position: 'top', labels: { color: '#a09090', font: { size: 11 }, padding: 12, usePointStyle: true } },
+            tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%` } }
+        },
+        scales: {
+            x: { grid: { color: 'rgba(192, 132, 252, 0.1)', drawBorder: false }, ticks: { color: '#a09090' }, title: { display: true, text: xLabel, color: '#a09090' } },
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(192, 132, 252, 0.15)', drawBorder: false }, ticks: { color: '#c084fc', callback: v => v + '%' }, title: { display: true, text: yLabel, color: '#c084fc' } }
+        }
+    };
+}
 
 /**
- * Update visualization charts
+ * Calculate turn-by-turn probabilities
  */
-function updateChart(config, result) {
-    const mulliganCanvas = 'mull-chart';
-    const turnCanvas = 'mull-turn-chart';
-
-    if (!document.getElementById(mulliganCanvas)) return;
-
-    // --- Mulligan Success Chart ---
-    const mulliganBreakdown = calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb);
-    const labels = mulliganBreakdown.map(m => {
-        if (m.label.includes('Opening')) return 'Opening';
-        const match = m.label.match(/Mulligan (\d+)/);
-        return match ? `Mull ${match[1]}` : m.label;
-    });
-
-    const singleAttempt = mulliganBreakdown.map(m => m.keepProbability * 100);
-    const cumulative = mulliganBreakdown.map(m => m.cumulative * 100);
-
-    chart = createOrUpdateChart(chart, mulliganCanvas, {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Single attempt',
-                    data: singleAttempt,
-                    backgroundColor: 'rgba(220, 38, 38, 0.8)',
-                    borderColor: '#dc2626',
-                    borderWidth: 1,
-                    order: 2
-                },
-                {
-                    label: 'Cumulative',
-                    data: cumulative,
-                    type: 'line',
-                    borderColor: '#c084fc',
-                    backgroundColor: 'rgba(192, 132, 252, 0.15)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 5,
-                    pointBackgroundColor: '#c084fc',
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2,
-                    order: 1
-                }
-            ]
-        },
-        options: {
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        color: '#a09090',
-                        font: { size: 11 },
-                        padding: 15,
-                        usePointStyle: true
-                    }
-                },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: {
-                        color: 'rgba(192, 132, 252, 0.1)',
-                        drawBorder: false
-                    },
-                    ticks: { color: '#a09090' },
-                    title: {
-                        display: true,
-                        text: 'Mulligan',
-                        color: '#a09090'
-                    }
-                },
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    grid: {
-                        color: 'rgba(192, 132, 252, 0.15)',
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: '#c084fc',
-                        callback: value => value + '%'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Probability',
-                        color: '#c084fc'
-                    }
-                }
-            }
-        }
-    });
-
-    // --- Turn-by-Turn Chart ---
-    if (!document.getElementById(turnCanvas)) return;
-
-    // Calculate probability of meeting requirements by each turn
+function calculateTurnProbabilities(config) {
     const maxTurn = Math.max(...config.types.map(t => t.byTurn)) + 3;
     const turnData = [];
 
     for (let turn = 0; turn <= maxTurn; turn++) {
-        const cardsSeen = 7 + turn;
+        const cardsSeen = turn === 0 ? 7 : 7 + (config.onThePlay ? Math.max(0, turn - 1) : turn);
 
-        // For each type, calculate probability of meeting requirement by this turn
-        const typeProbabilities = config.types.map((type, i) => {
+        // Individual type probabilities
+        const typeProbabilities = config.types.map(type => {
             let prob = 0;
             for (let drawn = type.required; drawn <= Math.min(type.count, cardsSeen); drawn++) {
                 prob += multiTypeProb(config.deckSize, [type.count], cardsSeen, [drawn]);
@@ -855,120 +687,71 @@ function updateChart(config, result) {
             return prob;
         });
 
-        // Combined probability (ALL requirements met)
-        let combinedProb = 0;
-        function generateCombinations(typeIndex, current, remaining) {
-            if (typeIndex === config.types.length) {
-                if (current.reduce((sum, n) => sum + n, 0) <= cardsSeen) {
-                    const handProb = multiTypeProb(
-                        config.deckSize,
-                        config.types.map(t => t.count),
-                        cardsSeen,
-                        current
-                    );
-                    if (handProb > 0) {
-                        const meetsReqs = config.types.every((type, i) => {
-                            return current[i] >= type.required;
-                        });
-                        if (meetsReqs) {
-                            combinedProb += handProb;
-                        }
-                    }
-                }
-                return;
-            }
-            const type = config.types[typeIndex];
-            const maxForType = Math.min(type.count, remaining);
-            for (let count = 0; count <= maxForType; count++) {
-                generateCombinations(typeIndex + 1, [...current, count], remaining - count);
-            }
-        }
-        generateCombinations(0, [], cardsSeen);
+        // Combined probability using cumulative function
+        const combinedProb = multiTypeProbCumulative(
+            config.deckSize,
+            config.types.map(t => t.count),
+            cardsSeen,
+            config.types.map(t => t.required)
+        );
 
         turnData.push({ turn, typeProbabilities, combinedProb });
     }
 
-    const colors = ['#a855f7', '#6b7280', '#c084fc'];
-    const datasets = [];
+    return turnData;
+}
 
-    config.types.forEach((type, i) => {
-        datasets.push({
-            label: type.name,
-            data: turnData.map(d => d.typeProbabilities[i] * 100),
-            borderColor: colors[i % colors.length],
-            backgroundColor: colors[i % colors.length] + '30',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.3,
-            pointRadius: 3,
-            pointBackgroundColor: colors[i % colors.length],
-            borderDash: [5, 5]
-        });
-    });
+/**
+ * Update visualization charts
+ */
+function updateChart(config, sharedData) {
+    // Mulligan Success Chart
+    if (document.getElementById('mull-chart')) {
+        const labels = sharedData.breakdown.map(m => m.label.includes('Opening') ? 'Opening' : `Mull ${m.label.match(/\d+/)?.[0] || ''}`);
 
-    datasets.push({
-        label: 'Combined (ALL)',
-        data: turnData.map(d => d.combinedProb * 100),
-        borderColor: '#c084fc',
-        backgroundColor: 'rgba(192, 132, 252, 0.15)',
-        borderWidth: 3,
-        fill: true,
-        tension: 0.3,
-        pointRadius: 5,
-        pointBackgroundColor: '#c084fc',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2
-    });
-
-    turnChart = createOrUpdateChart(turnChart, turnCanvas, {
-        type: 'line',
-        data: {
-            labels: turnData.map(d => d.turn),
-            datasets
-        },
-        options: {
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Natural Draw Probability (No Mulligan)',
-                    color: '#a09090',
-                    font: { size: 14, weight: 'normal' },
-                    padding: { bottom: 15 }
-                },
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        color: '#a09090',
-                        font: { size: 11 },
-                        padding: 12,
-                        usePointStyle: true
-                    }
-                },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                    }
-                }
+        chart = createOrUpdateChart(chart, 'mull-chart', {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Single attempt', data: sharedData.breakdown.map(m => m.keepProbability * 100), backgroundColor: 'rgba(220, 38, 38, 0.8)', borderColor: '#dc2626', borderWidth: 1, order: 2 },
+                    { label: 'Cumulative', data: sharedData.breakdown.map(m => m.cumulative * 100), type: 'line', borderColor: '#c084fc', backgroundColor: 'rgba(192, 132, 252, 0.15)', fill: true, tension: 0.4, pointRadius: 5, pointBackgroundColor: '#c084fc', pointBorderColor: '#fff', pointBorderWidth: 2, order: 1 }
+                ]
             },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(192, 132, 252, 0.1)', drawBorder: false },
-                    ticks: { color: '#a09090' },
-                    title: { display: true, text: 'Turn', color: '#a09090' }
-                },
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    grid: { color: 'rgba(192, 132, 252, 0.15)', drawBorder: false },
-                    ticks: { color: '#c084fc', callback: value => value + '%' },
-                    title: { display: true, text: 'Probability', color: '#c084fc' }
-                }
-            }
+            options: getChartOptions('Mulligan')
+        });
+    }
+
+    // Turn-by-Turn Chart (compute once if not cached in sharedData)
+    if (document.getElementById('mull-turn-chart')) {
+        if (!sharedData.turnData) {
+            sharedData.turnData = calculateTurnProbabilities(config);
         }
-    });
+        const colors = ['#a855f7', '#6b7280', '#c084fc'];
+
+        const datasets = [
+            ...config.types.map((type, i) => ({
+                label: type.name,
+                data: sharedData.turnData.map(d => d.typeProbabilities[i] * 100),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length] + '30',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: colors[i % colors.length],
+                borderDash: [5, 5]
+            })),
+            { label: 'Confidence Threshold', data: sharedData.turnData.map(() => config.confidenceThreshold * 100), borderColor: '#22c55e', borderWidth: 2, borderDash: [2, 2], pointRadius: 0, fill: false, order: 0 },
+            { label: 'Combined (ALL)', data: sharedData.turnData.map(d => d.combinedProb * 100), borderColor: '#c084fc', backgroundColor: 'rgba(192, 132, 252, 0.15)', borderWidth: 3, fill: true, tension: 0.3, pointRadius: 5, pointBackgroundColor: '#c084fc', pointBorderColor: '#fff', pointBorderWidth: 2 }
+        ];
+
+        turnChart = createOrUpdateChart(turnChart, 'mull-turn-chart', {
+            type: 'line',
+            data: { labels: sharedData.turnData.map(d => d.turn), datasets },
+            options: getChartOptions('Turn', 'Probability', 'Natural Draw Probability (No Mulligan)')
+        });
+    }
 }
 
 /**
@@ -983,9 +766,46 @@ export function updateUI() {
         return;
     }
 
-    updateChart(config, result);
-    updateStrategyTable(config, result);
-    updateSummary(config, result);
+    // Pre-compute shared data once
+    const sharedData = {
+        breakdown: calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb),
+        totalKeepProb: result.strategy.filter(h => h.keep).reduce((s, h) => s + h.handProb, 0),
+        typeCounts: config.types.map(t => t.count),
+        turnData: null  // Lazy computed on first use
+    };
+
+    updateChart(config, sharedData);
+    updateStrategyTable(config, result, sharedData);
+    updateSummary(config, result, sharedData);
+}
+
+/**
+ * Handle Preset Change
+ */
+function applyPreset(preset) {
+    const presets = {
+        casual: [0.4, 80, "High penalty. You prefer to keep 7 cards even if they are suboptimal."],
+        balanced: [0.2, 85, "Standard. A balanced approach to risk."],
+        competitive: [0.05, 90, "Low penalty. You are willing to mulligan aggressively to find key pieces."]
+    };
+
+    const [penalty, threshold, desc] = presets[preset] || presets.balanced;
+    const els = {
+        penalty: document.getElementById('mull-penalty'),
+        penaltyDisplay: document.getElementById('mull-penalty-display'),
+        penaltyDesc: document.getElementById('mull-penalty-desc'),
+        threshold: document.getElementById('mull-threshold'),
+        thresholdDisplay: document.getElementById('mull-threshold-display')
+    };
+
+    if (!els.penalty || !els.threshold) return;
+
+    els.penalty.value = penalty;
+    els.penaltyDisplay.textContent = (penalty * 100).toFixed(0) + '%';
+    els.penaltyDesc.textContent = desc;
+    els.threshold.value = threshold;
+    els.thresholdDisplay.textContent = threshold + '%';
+    updateUI();
 }
 
 /**
@@ -1001,21 +821,34 @@ export function init() {
         addBtn.addEventListener('click', addCardType);
     }
 
-    // Penalty slider
-    const penaltySlider = document.getElementById('mull-penalty');
-    const penaltyDisplay = document.getElementById('mull-penalty-display');
-    if (penaltySlider && penaltyDisplay) {
-        penaltySlider.addEventListener('input', () => {
-            penaltyDisplay.textContent = (parseFloat(penaltySlider.value) * 100).toFixed(0) + '%';
-            updateUI();
+    // Preset Selector
+    const presetSelect = document.getElementById('mull-preset');
+    if (presetSelect) {
+        presetSelect.addEventListener('change', (e) => {
+            applyPreset(e.target.value);
         });
     }
 
-    // Free mulligan checkbox
-    const freeCheckbox = document.getElementById('mull-free');
-    if (freeCheckbox) {
-        freeCheckbox.addEventListener('change', () => updateUI());
-    }
+    // Sliders with unified handler
+    const setupSlider = (id, displayId, formatter) => {
+        const slider = document.getElementById(id);
+        const display = document.getElementById(displayId);
+        if (slider && display) {
+            slider.addEventListener('input', () => {
+                display.textContent = formatter(slider.value);
+                updateUI();
+            });
+        }
+    };
+
+    setupSlider('mull-penalty', 'mull-penalty-display', v => (parseFloat(v) * 100).toFixed(0) + '%');
+    setupSlider('mull-threshold', 'mull-threshold-display', v => v + '%');
+
+    // Checkboxes with unified handler
+    ['mull-free', 'mull-on-play', 'mull-cumulative'].forEach(id => {
+        const checkbox = document.getElementById(id);
+        if (checkbox) checkbox.addEventListener('change', () => updateUI());
+    });
 
     // Listen for deck configuration changes
     DeckConfig.onDeckUpdate(() => {

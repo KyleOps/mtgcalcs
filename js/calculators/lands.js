@@ -14,6 +14,19 @@ let lastDeckHash = '';
 let openingHandChart = null;
 let landDropChart = null;
 
+// Color constants
+const COLORS = {
+    primary: '#4ade80',
+    primaryDim: 'rgba(74, 222, 128, 0.4)',
+    primaryBright: 'rgba(74, 222, 128, 0.8)',
+    primaryFaint: 'rgba(74, 222, 128, 0.1)',
+    primaryGrid: 'rgba(34, 197, 94, 0.2)',
+    danger: '#dc2626',
+    dangerFaint: 'rgba(220, 38, 38, 0.1)',
+    text: '#a09090',
+    white: '#fff'
+};
+
 /**
  * Calculate probability of drawing new lands by a given turn
  * @param {number} deckSize - Total deck size
@@ -121,9 +134,7 @@ export function calculateLandDropByTurn(deckSize, landCount) {
  */
 export function getDeckConfig() {
     const config = DeckConfig.getDeckConfig();
-    const deckSize = config.creatures + config.instants + config.sorceries +
-                    config.artifacts + config.enchantments + config.planeswalkers +
-                    config.lands + config.battles;
+    const deckSize = DeckConfig.getDeckSize(true);
     const landCount = config.lands;
 
     // Clear cache if deck changed
@@ -155,14 +166,20 @@ export function calculate() {
 }
 
 /**
+ * Common chart scale options
+ */
+const getScaleOptions = () => ({
+    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Probability (%)', color: COLORS.primary }, grid: { color: COLORS.primaryGrid }, ticks: { color: COLORS.primary } },
+    x: { grid: { color: COLORS.primaryGrid }, ticks: { color: COLORS.text } }
+});
+
+/**
  * Update opening hand chart
  */
 function updateOpeningHandChart(config, openingHands) {
     const labels = openingHands.distribution.map(d => `${d.lands} land${d.lands !== 1 ? 's' : ''}`);
     const data = openingHands.distribution.map(d => d.probability * 100);
-    const backgroundColors = openingHands.distribution.map(d =>
-        d.lands === openingHands.median ? 'rgba(74, 222, 128, 0.8)' : 'rgba(74, 222, 128, 0.4)'
-    );
+    const backgroundColors = openingHands.distribution.map(d => d.lands === openingHands.median ? COLORS.primaryBright : COLORS.primaryDim);
 
     openingHandChart = createOrUpdateChart(openingHandChart, 'lands-opening-chart', {
         type: 'bar',
@@ -172,24 +189,12 @@ function updateOpeningHandChart(config, openingHands) {
                 label: 'Probability (%)',
                 data,
                 backgroundColor: backgroundColors,
-                borderColor: '#4ade80',
+                borderColor: COLORS.primary,
                 borderWidth: 2
             }]
         },
         options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: 'Probability (%)', color: '#4ade80' },
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#4ade80' }
-                },
-                x: {
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#a09090' }
-                }
-            },
+            scales: getScaleOptions(),
             plugins: {
                 tooltip: {
                     callbacks: {
@@ -206,8 +211,7 @@ function updateOpeningHandChart(config, openingHands) {
  */
 function updateLandDropChart(config, landDropByTurn, landDropMiss) {
     const labels = landDropByTurn.map(d => `Turn ${d.turn}`);
-    const makeData = landDropByTurn.map(d => d.makeProbability * 100);
-    const missData = landDropByTurn.map(d => d.missProbability * 100);
+    const pointRadii = landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4);
 
     landDropChart = createOrUpdateChart(landDropChart, 'lands-landdrop-chart', {
         type: 'line',
@@ -216,47 +220,32 @@ function updateLandDropChart(config, landDropByTurn, landDropMiss) {
             datasets: [
                 {
                     label: 'Make Land Drop',
-                    data: makeData,
-                    borderColor: '#4ade80',
-                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    data: landDropByTurn.map(d => d.makeProbability * 100),
+                    borderColor: COLORS.primary,
+                    backgroundColor: COLORS.primaryFaint,
                     fill: false,
                     tension: 0.3,
-                    pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
-                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#4ade80')
+                    pointRadius: pointRadii,
+                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? COLORS.white : COLORS.primary)
                 },
                 {
                     label: 'Miss Land Drop',
-                    data: missData,
-                    borderColor: '#dc2626',
-                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    data: landDropByTurn.map(d => d.missProbability * 100),
+                    borderColor: COLORS.danger,
+                    backgroundColor: COLORS.dangerFaint,
                     fill: false,
                     tension: 0.3,
-                    pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
-                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#dc2626')
+                    pointRadius: pointRadii,
+                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? COLORS.white : COLORS.danger)
                 }
             ]
         },
         options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: 'Probability (%)', color: '#4ade80' },
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#4ade80' }
-                },
-                x: {
-                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                    ticks: { color: '#a09090' }
-                }
-            },
+            scales: getScaleOptions(),
             plugins: {
                 tooltip: {
                     callbacks: {
-                        label: ctx => {
-                            const label = ctx.dataset.label;
-                            return `${label}: ${ctx.parsed.y.toFixed(1)}%`;
-                        }
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
                     }
                 }
             }
