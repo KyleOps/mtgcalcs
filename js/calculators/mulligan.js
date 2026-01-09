@@ -4,12 +4,14 @@
  */
 
 import { drawType, drawTypeMin, drawTwoTypeMin, drawThreeTypeMin } from '../utils/hypergeometric.js';
-import { formatNumber, formatPercentage, createCache, getChartAnimationConfig } from '../utils/simulation.js';
+import { formatNumber, formatPercentage, createCache } from '../utils/simulation.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 let simulationCache = createCache(100);
 let lastConfigHash = '';
 let chart = null;
+let turnChart = null;
 
 // Card type management
 let cardTypes = [
@@ -182,14 +184,20 @@ function mullStratMultiType(deckSize, types, penalty, freeMulligan = false) {
     });
 
     const mulliganProb = 1 - strategy.filter(h => h.keep).reduce((sum, h) => sum + h.handProb, 0);
+    
+    // Calculate the expected value of a round where mulligans are penalized
+    // This represents the value of "Mulliganing to 6" (heuristic)
+    const penalizedOutcome = bestKeepProb * (1 - penalty);
+    const evPenalized = expectedSuccess + mulliganProb * penalizedOutcome;
 
-    // After mulligan, we get bestKeepProb success chance
-    // But with penalty applied (except for first free mulligan)
+    // After mulligan, we get...
     if (freeMulligan) {
-        // First mulligan is free (no penalty), then penalty applies
-        expectedSuccess += mulliganProb * bestKeepProb;
+        // First mulligan is free. If we mulligan, we get the value of a fresh 7 (which will be penalized if mulled again).
+        // That value is exactly evPenalized.
+        expectedSuccess += mulliganProb * evPenalized;
     } else {
-        expectedSuccess += mulliganProb * (bestKeepProb * (1 - penalty));
+        // No free mulligan. Value is the penalized round value.
+        expectedSuccess = evPenalized;
     }
 
     return { strategy, expectedSuccess, threshold, bestKeepProb };
@@ -200,6 +208,7 @@ function mullStratMultiType(deckSize, types, penalty, freeMulligan = false) {
  */
 function calculateMarginalBenefits(deckSize, types, penalty, freeMulligan) {
     const baseResult = mullStratMultiType(deckSize, types, penalty, freeMulligan);
+    const baseBaseline = calculateNoMulliganSuccess(deckSize, types);
     const benefits = [];
 
     types.forEach((type, index) => {
@@ -207,8 +216,12 @@ function calculateMarginalBenefits(deckSize, types, penalty, freeMulligan) {
             i === index ? { ...t, count: t.count + 1 } : t
         );
         const modifiedResult = mullStratMultiType(deckSize + 1, modifiedTypes, penalty, freeMulligan);
-        const benefit = modifiedResult.expectedSuccess - baseResult.expectedSuccess;
-        benefits.push(benefit);
+        const modifiedBaseline = calculateNoMulliganSuccess(deckSize + 1, modifiedTypes);
+        
+        benefits.push({
+            overall: modifiedResult.expectedSuccess - baseResult.expectedSuccess,
+            baseline: modifiedBaseline - baseBaseline
+        });
     });
 
     return benefits;
@@ -217,25 +230,55 @@ function calculateMarginalBenefits(deckSize, types, penalty, freeMulligan) {
 /**
  * Calculate average number of mulligans and expected cards in hand
  */
-function calculateAvgMulligans(strategy, penalty) {
+function calculateAvgMulligans(strategy, penalty, freeMulligan) {
     const keepProb = strategy.filter(h => h.keep).reduce((sum, h) => sum + h.handProb, 0);
     // Geometric distribution: E[mulligans] = (1-p) / p where p is keep probability
     const avgMulligans = keepProb > 0 ? (1 - keepProb) / keepProb : 0;
 
-    // Expected cards in hand after mulligans
-    // If free mulligan: first mull to 7, then 6, 5, 4, etc.
-    // If not free: 6, 5, 4, etc.
-    const freeMull = penalty === 0;
-    let expectedCards = 7; // Start with 7
-
-    if (avgMulligans > 0) {
-        if (freeMull) {
-            // Free: 7, 7, 6, 5, 4...
-            expectedCards = 7 - Math.max(0, avgMulligans - 1);
-        } else {
-            // Not free: 6, 5, 4...
-            expectedCards = 7 - avgMulligans;
+    // Expected cards in hand calculation
+    let expectedCards = 0;
+    
+    // Calculate weighted average of cards kept
+    // P(Keep 0 mulls) * 7
+    // P(Keep 1 mull) * (free ? 7 : 6)
+    // P(Keep 2 mulls) * (free ? 6 : 5)
+    // ...
+    
+    let remainingProb = 1.0;
+    let currentCards = 7;
+    let mulliganCount = 0;
+    let accumulatedProb = 0;
+    
+    // Sum the first 10 mulligan layers (sufficient precision)
+    for (let i = 0; i < 10; i++) {
+        // Probability of keeping at this stage
+        const pKeepHere = remainingProb * keepProb;
+        
+        // Cards we have if we keep here
+        let cardsIfKeep = 7;
+        if (mulliganCount > 0) {
+            if (freeMulligan) {
+                cardsIfKeep = 7 - (mulliganCount - 1);
+            } else {
+                cardsIfKeep = 7 - mulliganCount;
+            }
         }
+        // Cap at 0 cards
+        cardsIfKeep = Math.max(0, cardsIfKeep);
+        
+        expectedCards += pKeepHere * cardsIfKeep;
+        accumulatedProb += pKeepHere;
+        
+        // Advance to next mulligan
+        remainingProb *= (1 - keepProb);
+        mulliganCount++;
+        
+        if (remainingProb < 0.0001) break;
+    }
+    
+    // Normalize if we didn't reach 100% (truncation)
+    if (accumulatedProb > 0) {
+        expectedCards = expectedCards / accumulatedProb;
     }
 
     return { avgMulligans, expectedCards };
@@ -325,7 +368,7 @@ export function calculate() {
     }
 
     const result = mullStratMultiType(config.deckSize, config.types, config.penalty, config.freeMulligan);
-    const mulliganStats = calculateAvgMulligans(result.strategy, config.penalty);
+    const mulliganStats = calculateAvgMulligans(result.strategy, config.penalty, config.freeMulligan);
     result.avgMulligans = mulliganStats.avgMulligans;
     result.expectedCards = mulliganStats.expectedCards;
     result.baselineSuccess = calculateNoMulliganSuccess(config.deckSize, config.types);
@@ -460,7 +503,44 @@ function updateStrategyTable(config, result) {
     const tableEl = document.getElementById('mull-strategyTable');
     if (!tableEl) return;
 
-    // Group hands by decision for cleaner display
+    // Single Type Case - Simplified Table
+    if (config.types.length === 1) {
+        const typeName = config.types[0].name;
+        // Sort by count descending
+        const rows = result.strategy.sort((a, b) => b.counts[0] - a.counts[0]);
+
+        let tableHTML = `
+            <tr>
+                <th>${typeName} Count</th>
+                <th>Decision</th>
+                <th>Success Rate</th>
+                <th>Hand %</th>
+            </tr>
+        `;
+
+        rows.forEach(hand => {
+            const count = hand.counts[0];
+            const decision = hand.keep ? 'Keep' : 'Mulligan';
+            const decisionClass = hand.keep ? 'marginal-positive' : 'marginal-negative';
+            const rowClass = hand.keep ? '' : 'marginal-negative';
+            
+            // Only show rows where hand probability is relevant (>0.01%) or it's a keep
+            if (hand.handProb < 0.0001 && !hand.keep) return;
+
+            tableHTML += `
+                <tr class="${rowClass}">
+                    <td><strong>${count}</strong></td>
+                    <td class="${decisionClass}" style="font-weight:bold;">${decision}</td>
+                    <td>${formatPercentage(hand.successProb)}</td>
+                    <td style="color:var(--text-dim); font-size:0.9em;">${formatPercentage(hand.handProb)}</td>
+                </tr>
+            `;
+        });
+        tableEl.innerHTML = tableHTML;
+        return;
+    }
+
+    // Multi-Type Case: Group hands by decision for cleaner display
     const keepHands = result.strategy.filter(h => h.keep).sort((a, b) => b.successProb - a.successProb);
     const mulliganHands = result.strategy.filter(h => !h.keep).sort((a, b) => b.handProb - a.handProb);
 
@@ -507,12 +587,12 @@ function updateStrategyTable(config, result) {
     let tableHTML = headerRow;
 
     if (topKeeps.length > 0) {
-        tableHTML += `<tr class="section-header"><td colspan="${config.types.length + 3}"><strong>Top Hands to Keep</strong></td></tr>`;
+        tableHTML += `<tr class="section-header"><td colspan="${config.types.length + 3}" style="background:var(--panel-bg-alt); color:var(--text-secondary); font-size:0.9em; padding:8px;"><strong>Top Hands to Keep</strong></td></tr>`;
         tableHTML += topKeeps.map(renderHand).join('');
     }
 
     if (topMulligans.length > 0) {
-        tableHTML += `<tr class="section-header"><td colspan="${config.types.length + 3}"><strong>Sample Hands to Mulligan</strong></td></tr>`;
+        tableHTML += `<tr class="section-header"><td colspan="${config.types.length + 3}" style="background:var(--panel-bg-alt); color:var(--text-secondary); font-size:0.9em; padding:8px;"><strong>Sample Hands to Mulligan</strong></td></tr>`;
         tableHTML += topMulligans.map(renderHand).join('');
     }
 
@@ -594,114 +674,76 @@ function updateSummary(config, result) {
     const summaryEl = document.getElementById('mull-summary');
     if (!summaryEl) return;
 
-    const keepHands = result.strategy.filter(h => h.keep);
-    const keepRate = keepHands.reduce((sum, h) => sum + h.handProb, 0);
-    const mulliganRate = 1 - keepRate;
-
-    // Generate marginal benefit text
-    const marginalText = result.marginalBenefits.map((benefit, i) =>
-        `<li>Adding 1 more ${config.types[i].name}: <strong class="marginal-positive">+${formatPercentage(benefit)}</strong> success rate</li>`
-    ).join('');
-
-    // Create success criteria text
-    const criteriaText = config.types.map(type =>
-        `${type.required}+ <strong>${type.name}</strong> by turn ${type.byTurn}`
-    ).join(' <strong>AND</strong> ');
-
     // Calculate improvement from mulligan strategy
     const improvement = result.expectedSuccess - result.baselineSuccess;
-    const improvementSign = improvement >= 0 ? '+' : '';
 
-    // Calculate mulligan breakdown
+    // Calculate mulligan breakdown for detail view
     const mulliganBreakdown = calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb);
-
-    // Calculate probability of hitting requirements in opening hand or after mulligan phase
-    const hitInOpener = mulliganBreakdown[0].keepProbability * mulliganBreakdown[0].successRate;
-    const hitAfterMulligans = mulliganBreakdown.reduce((sum, m) => sum + (m.keepProbability * m.successRate), 0);
-
+    
     const breakdownHTML = mulliganBreakdown.map(m => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(192, 132, 252, 0.1);">
-            <span style="color: var(--text-secondary); flex: 1;">${m.label}</span>
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <div style="text-align: right; min-width: 90px;">
-                    <div style="color: ${m.drawRate >= 0.2 ? '#4ade80' : '#dc2626'}; font-weight: 600; font-size: 0.95em;">
-                        ${formatPercentage(m.drawRate)}
-                    </div>
-                    <div style="color: var(--text-dim); font-size: 0.75em;">opening hand</div>
-                </div>
-                <div style="text-align: right; min-width: 90px;">
-                    <div style="color: #c084fc; font-weight: 600; font-size: 0.95em;">
-                        ${formatPercentage(m.cumulative)}
-                    </div>
-                    <div style="color: var(--text-dim); font-size: 0.75em;">cumulative</div>
-                </div>
-                <div style="text-align: right; min-width: 90px;">
-                    <div style="color: #38bdf8; font-weight: 600; font-size: 0.95em;">
-                        ${formatPercentage(m.successRate)}
-                    </div>
-                    <div style="color: var(--text-dim); font-size: 0.75em;">by turn ${Math.max(...config.types.map(t => t.byTurn))}</div>
-                </div>
-            </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.9em;">
+            <span style="color: var(--text-secondary);">${m.label}</span>
+            <span style="color: var(--text-light);">${formatPercentage(m.cumulative)}</span>
         </div>
     `).join('');
 
     summaryEl.innerHTML = `
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
-            <div class="stat-card" style="background: linear-gradient(135deg, rgba(74, 222, 128, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%); border: 1px solid rgba(74, 222, 128, 0.3);">
-                <div style="color: var(--text-secondary); font-size: 0.8em; margin-bottom: 6px;">Hit in Opener</div>
-                <div style="font-size: 2em; font-weight: bold; color: #4ade80; line-height: 1;">${formatPercentage(hitInOpener)}</div>
-                <div style="color: var(--text-dim); font-size: 0.75em; margin-top: 6px;">
-                    before mulligans
-                </div>
+        <div style="text-align: center; margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(192, 132, 252, 0.1) 0%, rgba(10, 10, 18, 0) 100%); border-radius: 12px; border: 1px solid rgba(192, 132, 252, 0.2);">
+            <div style="font-size: 0.85em; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Overall Success Rate</div>
+            <div style="font-size: 3.5em; font-weight: 700; color: #c084fc; line-height: 1; text-shadow: 0 0 20px rgba(192, 132, 252, 0.3);">
+                ${formatPercentage(result.expectedSuccess)}
             </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, rgba(192, 132, 252, 0.15) 0%, rgba(147, 51, 234, 0.05) 100%); border: 1px solid rgba(192, 132, 252, 0.3);">
-                <div style="color: var(--text-secondary); font-size: 0.8em; margin-bottom: 6px;">Overall Success</div>
-                <div style="font-size: 2em; font-weight: bold; color: #c084fc; line-height: 1;">${formatPercentage(result.expectedSuccess)}</div>
-                <div style="color: var(--text-dim); font-size: 0.75em; margin-top: 6px;">
-                    with mulligans
-                </div>
-            </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(3, 105, 161, 0.05) 100%); border: 1px solid rgba(14, 165, 233, 0.3);">
-                <div style="color: var(--text-secondary); font-size: 0.8em; margin-bottom: 6px;">Draw Into It</div>
-                <div style="font-size: 2em; font-weight: bold; color: #38bdf8; line-height: 1;">${formatPercentage(result.expectedSuccess - hitAfterMulligans)}</div>
-                <div style="color: var(--text-dim); font-size: 0.75em; margin-top: 6px;">
-                    after mulligan phase
-                </div>
+            <div style="color: var(--text-dim); font-size: 0.9em; margin-top: 8px;">
+                (${formatPercentage(result.baselineSuccess)} without mulligans)
             </div>
         </div>
 
         <div style="background: var(--panel-bg-alt); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-            <h3 style="font-family: var(--font-display); font-size: 1rem; margin: 0 0 12px 0; color: var(--text-light);">
-                Mulligan Breakdown
-            </h3>
-            ${breakdownHTML}
-        </div>
-
-        <div style="background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px; padding: 12px; margin-bottom: 16px;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: var(--text-light);">🎯 Success Means:</div>
-            <div style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Draw ${criteriaText}.
-                <div style="color: var(--text-dim); font-size: 0.85em; margin-top: 6px;">
-                    "By turn X" means by the time you draw for turn X (${Math.max(...config.types.map(t => t.byTurn)) + 7} cards seen total).
+            <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.95em; line-height: 1.5;">
+                This strategy mulligans <strong>${formatNumber(result.avgMulligans, 2)}</strong> times on average, 
+                starting with an average of <strong>${formatNumber(result.expectedCards, 2)}</strong> cards.
+            </div>
+            
+            <details>
+                <summary style="cursor: pointer; color: var(--text-dim); font-size: 0.85em;">View Mulligan Breakdown</summary>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                    ${breakdownHTML}
                 </div>
-            </div>
+            </details>
         </div>
 
-        <div style="background: var(--panel-bg-alt); border-radius: 4px; padding: 12px;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: var(--text-light);">💡 Marginal Value:</div>
-            <div style="color: var(--text-secondary); font-size: 0.9em;">
-                <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                    ${marginalText}
-                </ul>
-            </div>
+        <div style="background: rgba(34, 197, 94, 0.05); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 16px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 0.95em; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px;">💡 Marginal Value (Impact on Overall Success)</h3>
+            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 0.9em; line-height: 1.6;">
+                ${result.marginalBenefits.map((benefit, i) => 
+                    `<li>
+                        Adding an extra <strong>${config.types[i].name}</strong>:
+                        <div style="margin-left: 8px; font-size: 0.9em;">
+                            • Overall Success: <strong style="color: #4ade80;">${formatPercentage(benefit.overall > 0 ? benefit.overall : 0, 2)}</strong><br>
+                            • Natural Draw: <strong style="color: #a09090;">${formatPercentage(benefit.baseline > 0 ? benefit.baseline : 0, 2)}</strong>
+                        </div>
+                    </li>`
+                ).join('')}
+            </ul>
         </div>
     `;
 }
 
+
+
+
+
 /**
- * Create mulligan success chart (similar to mockup)
+ * Update visualization charts
  */
-function createMulliganSuccessChart(canvas, mulliganBreakdown) {
+function updateChart(config, result) {
+    const mulliganCanvas = 'mull-chart';
+    const turnCanvas = 'mull-turn-chart';
+
+    if (!document.getElementById(mulliganCanvas)) return;
+
+    // --- Mulligan Success Chart ---
+    const mulliganBreakdown = calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb);
     const labels = mulliganBreakdown.map(m => {
         if (m.label.includes('Opening')) return 'Opening';
         const match = m.label.match(/Mulligan (\d+)/);
@@ -711,7 +753,7 @@ function createMulliganSuccessChart(canvas, mulliganBreakdown) {
     const singleAttempt = mulliganBreakdown.map(m => m.keepProbability * 100);
     const cumulative = mulliganBreakdown.map(m => m.cumulative * 100);
 
-    return new Chart(canvas, {
+    chart = createOrUpdateChart(chart, mulliganCanvas, {
         type: 'bar',
         data: {
             labels,
@@ -741,9 +783,6 @@ function createMulliganSuccessChart(canvas, mulliganBreakdown) {
             ]
         },
         options: {
-            ...getChartAnimationConfig(),
-            responsive: true,
-            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     display: true,
@@ -796,12 +835,10 @@ function createMulliganSuccessChart(canvas, mulliganBreakdown) {
             }
         }
     });
-}
 
-/**
- * Create turn-by-turn probability chart
- */
-function createTurnByTurnChart(canvas, config, result) {
+    // --- Turn-by-Turn Chart ---
+    if (!document.getElementById(turnCanvas)) return;
+
     // Calculate probability of meeting requirements by each turn
     const maxTurn = Math.max(...config.types.map(t => t.byTurn)) + 3;
     const turnData = [];
@@ -811,12 +848,6 @@ function createTurnByTurnChart(canvas, config, result) {
 
         // For each type, calculate probability of meeting requirement by this turn
         const typeProbabilities = config.types.map((type, i) => {
-            // Can't meet requirement before the required turn
-            if (turn < type.byTurn) {
-                return 0;
-            }
-
-            // Calculate probability of drawing enough of this type by this turn
             let prob = 0;
             for (let drawn = type.required; drawn <= Math.min(type.count, cardsSeen); drawn++) {
                 prob += multiTypeProb(config.deckSize, [type.count], cardsSeen, [drawn]);
@@ -825,9 +856,7 @@ function createTurnByTurnChart(canvas, config, result) {
         });
 
         // Combined probability (ALL requirements met)
-        // This means ALL types have met their requirements by their respective turns
         let combinedProb = 0;
-
         function generateCombinations(typeIndex, current, remaining) {
             if (typeIndex === config.types.length) {
                 if (current.reduce((sum, n) => sum + n, 0) <= cardsSeen) {
@@ -838,11 +867,7 @@ function createTurnByTurnChart(canvas, config, result) {
                         current
                     );
                     if (handProb > 0) {
-                        // Check if ALL requirements are met
                         const meetsReqs = config.types.every((type, i) => {
-                            // If we haven't reached the turn yet, requirement isn't applicable
-                            if (turn < type.byTurn) return true;
-                            // Otherwise, check if we have enough
                             return current[i] >= type.required;
                         });
                         if (meetsReqs) {
@@ -852,28 +877,20 @@ function createTurnByTurnChart(canvas, config, result) {
                 }
                 return;
             }
-
             const type = config.types[typeIndex];
             const maxForType = Math.min(type.count, remaining);
             for (let count = 0; count <= maxForType; count++) {
                 generateCombinations(typeIndex + 1, [...current, count], remaining - count);
             }
         }
-
         generateCombinations(0, [], cardsSeen);
 
-        turnData.push({
-            turn,
-            typeProbabilities,
-            combinedProb
-        });
+        turnData.push({ turn, typeProbabilities, combinedProb });
     }
 
-    // Create datasets for each type + combined
     const colors = ['#a855f7', '#6b7280', '#c084fc'];
     const datasets = [];
 
-    // Individual type datasets
     config.types.forEach((type, i) => {
         datasets.push({
             label: type.name,
@@ -889,7 +906,6 @@ function createTurnByTurnChart(canvas, config, result) {
         });
     });
 
-    // Combined (ALL) dataset
     datasets.push({
         label: 'Combined (ALL)',
         data: turnData.map(d => d.combinedProb * 100),
@@ -904,17 +920,21 @@ function createTurnByTurnChart(canvas, config, result) {
         pointBorderWidth: 2
     });
 
-    return new Chart(canvas, {
+    turnChart = createOrUpdateChart(turnChart, turnCanvas, {
         type: 'line',
         data: {
             labels: turnData.map(d => d.turn),
             datasets
         },
         options: {
-            ...getChartAnimationConfig(),
-            responsive: true,
-            maintainAspectRatio: false,
             plugins: {
+                title: {
+                    display: true,
+                    text: 'Natural Draw Probability (No Mulligan)',
+                    color: '#a09090',
+                    font: { size: 14, weight: 'normal' },
+                    padding: { bottom: 15 }
+                },
                 legend: {
                     display: true,
                     position: 'top',
@@ -935,72 +955,20 @@ function createTurnByTurnChart(canvas, config, result) {
             },
             scales: {
                 x: {
-                    grid: {
-                        color: 'rgba(192, 132, 252, 0.1)',
-                        drawBorder: false
-                    },
+                    grid: { color: 'rgba(192, 132, 252, 0.1)', drawBorder: false },
                     ticks: { color: '#a09090' },
-                    title: {
-                        display: true,
-                        text: 'Turn',
-                        color: '#a09090'
-                    }
+                    title: { display: true, text: 'Turn', color: '#a09090' }
                 },
                 y: {
                     beginAtZero: true,
                     max: 100,
-                    grid: {
-                        color: 'rgba(192, 132, 252, 0.15)',
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: '#c084fc',
-                        callback: value => value + '%'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Probability',
-                        color: '#c084fc'
-                    }
+                    grid: { color: 'rgba(192, 132, 252, 0.15)', drawBorder: false },
+                    ticks: { color: '#c084fc', callback: value => value + '%' },
+                    title: { display: true, text: 'Probability', color: '#c084fc' }
                 }
             }
         }
     });
-}
-
-/**
- * Update visualization charts
- */
-function updateChart(config, result) {
-    const mulliganCanvas = document.getElementById('mull-chart');
-    const turnCanvas = document.getElementById('mull-turn-chart');
-
-    if (!mulliganCanvas) return;
-
-    const mulliganBreakdown = calculateMulliganBreakdown(result.strategy, config.freeMulligan, result.bestKeepProb);
-
-    if (!chart) {
-        chart = createMulliganSuccessChart(mulliganCanvas, mulliganBreakdown);
-    } else {
-        const labels = mulliganBreakdown.map(m => {
-            if (m.label.includes('Opening')) return 'Opening';
-            const match = m.label.match(/Mulligan (\d+)/);
-            return match ? `Mull ${match[1]}` : m.label;
-        });
-
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = mulliganBreakdown.map(m => m.keepProbability * 100);
-        chart.data.datasets[1].data = mulliganBreakdown.map(m => m.cumulative * 100);
-        chart.update();
-    }
-
-    // Update turn-by-turn chart if it exists
-    if (turnCanvas) {
-        if (window.mullTurnChart) {
-            window.mullTurnChart.destroy();
-        }
-        window.mullTurnChart = createTurnByTurnChart(turnCanvas, config, result);
-    }
 }
 
 /**

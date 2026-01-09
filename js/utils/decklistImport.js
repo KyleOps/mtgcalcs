@@ -486,13 +486,12 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
 
                 // Store detailed card info for non-lands
                 if (primaryCategory !== 'lands' && cmc !== undefined) {
-                    const cmcValue = Math.floor(cmc);
-
-                    // Parse power (handle *, 1+*, etc.)
+                    // Parse power (handle *, 1+*, X, etc.) for legacy/simple check, but store raw too
                     let powerNum = null;
                     if (allCategories.includes('creatures') && power !== undefined && power !== null) {
-                        if (power !== '*' && power !== '1+*' && !isNaN(parseInt(power))) {
-                            powerNum = parseInt(power);
+                        const pStr = String(power);
+                        if (!pStr.includes('*') && !pStr.includes('X') && !isNaN(parseInt(pStr))) {
+                            powerNum = parseInt(pStr);
                         }
                     }
 
@@ -500,10 +499,10 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
                     for (let i = 0; i < count; i++) {
                         cardDetails.push({
                             name: cardData.name,
-                            cmc: cmcValue,
+                            cmc: cmc,
                             type: primaryCategory,
-                            allTypes: allCategories, // Store all types for filtering
-                            power: powerNum,
+                            allTypes: allCategories,
+                            power: power, // Store raw power (e.g. "*", "5")
                             isPower5Plus: powerNum !== null && powerNum >= 5
                         });
                     }
@@ -575,6 +574,10 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
 
 // ==================== WEB IMPORT (Moxfield & Archidekt) ====================
 
+// TODO: Deploy the Cloudflare Worker in the /serverless folder and add its URL here.
+// Example: 'https://mtgcalcs-proxy.yourname.workers.dev'
+const CUSTOM_PROXY_URL = '';
+
 const CORS_PROXIES = [
     'https://corsproxy.io/?',
     'https://api.allorigins.win/raw?url=',
@@ -619,6 +622,23 @@ function parseImportInput(input) {
  * Fetch URL using CORS proxies with fallback
  */
 async function fetchWithProxy(url, proxyIndex = 0) {
+    // Priority: Use secure custom proxy if configured
+    if (CUSTOM_PROXY_URL) {
+        try {
+            const proxyUrl = `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) {
+                // If custom proxy fails, fall back to public ones (though they might not work for Moxfield)
+                console.warn('Custom proxy failed, trying public proxies...');
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Custom proxy error:', error);
+            // Fall through to public proxies
+        }
+    }
+
     if (proxyIndex >= CORS_PROXIES.length) {
         throw new Error('All CORS proxies failed. Please try again later or check your connection.');
     }
@@ -700,8 +720,9 @@ function processCardEntry(cardData, count, typeCounts, cardDetails, cardsByName)
     if (primaryCategory !== 'lands' && cmc !== undefined) {
         let powerNum = null;
         if (allCategories.includes('creatures') && power !== undefined && power !== null) {
-            if (power !== '*' && power !== '1+*' && !isNaN(parseInt(power))) {
-                powerNum = parseInt(power);
+            const pStr = String(power);
+            if (!pStr.includes('*') && !pStr.includes('X') && !isNaN(parseInt(pStr))) {
+                powerNum = parseInt(pStr);
             }
         }
 
@@ -711,7 +732,7 @@ function processCardEntry(cardData, count, typeCounts, cardDetails, cardsByName)
                 cmc: Math.floor(cmc),
                 type: primaryCategory,
                 allTypes: allCategories,
-                power: powerNum,
+                power: power, // Store raw power
                 isPower5Plus: powerNum !== null && powerNum >= 5
             });
         }

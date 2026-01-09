@@ -9,6 +9,7 @@ import * as Wave from './calculators/wave.js';
 import * as Vortex from './calculators/vortex.js';
 import * as Lands from './calculators/lands.js';
 import * as Rashmi from './calculators/rashmi.js';
+import * as Mulligan from './calculators/mulligan.js';
 import { debounce } from './utils/simulation.js';
 import * as Components from './utils/components.js';
 import * as DeckConfig from './utils/deckConfig.js';
@@ -23,7 +24,8 @@ const calculators = {
     wave: { icon: '🌊', name: 'Genesis Wave' },
     vortex: { icon: '🌀', name: 'Monstrous Vortex' },
     rashmi: { icon: '🌌', name: 'Rashmi' },
-    lands: { icon: '🏔️', name: 'Land Drops' }
+    lands: { icon: '🏔️', name: 'Land Drops' },
+    mulligan: { icon: '🃏', name: 'Mulligan Strategy' }
 };
 
 /**
@@ -82,6 +84,8 @@ function switchTab(tab) {
         Lands.updateUI();
     } else if (tab === 'rashmi') {
         Rashmi.updateUI();
+    } else if (tab === 'mulligan') {
+        Mulligan.updateUI();
     }
 }
 
@@ -140,89 +144,27 @@ function initTabNavigation() {
  * Initialize Portent calculator inputs
  */
 function initPortentInputs() {
-    const debouncedUpdate = debounce(() => Portent.updateUI(), 150);
-
-    // X value slider and number input
-    const xSlider = document.getElementById('portent-xSlider');
-    const xNumber = document.getElementById('portent-xValue');
-
-    xSlider.addEventListener('input', () => {
-        xNumber.value = xSlider.value;
-        debouncedUpdate();
-    });
-
-    xNumber.addEventListener('input', () => {
-        const val = parseInt(xNumber.value) || 1;
-        xSlider.value = Math.min(Math.max(val, 1), 30);
-        debouncedUpdate();
-    });
-
-    // Sample reveals buttons
-    const portentDrawRevealsBtn = document.getElementById('portent-draw-reveals-btn');
-    if (portentDrawRevealsBtn) {
-        portentDrawRevealsBtn.addEventListener('click', () => {
-            Portent.runSampleReveals();
-        });
-    }
-
-    const surgeDrawRevealsBtn = document.getElementById('surge-draw-reveals-btn');
-    if (surgeDrawRevealsBtn) {
-        surgeDrawRevealsBtn.addEventListener('click', () => {
-            Surge.runSampleReveals();
-        });
-    }
-
-    const waveDrawRevealsBtn = document.getElementById('wave-draw-reveals-btn');
-    if (waveDrawRevealsBtn) {
-        waveDrawRevealsBtn.addEventListener('click', () => {
-            Wave.runSampleReveals();
-        });
-    }
-
-    // Listen for deck config changes
-    DeckConfig.onDeckUpdate(() => debouncedUpdate());
+    Portent.init();
 }
 
 /**
  * Initialize Surge calculator inputs
  */
 function initSurgeInputs() {
-    const debouncedUpdate = debounce(() => Surge.updateUI(), 150);
-
-    // Listen for deck config changes
-    DeckConfig.onDeckUpdate(() => debouncedUpdate());
+    Surge.init();
 }
 
 /**
  * Initialize Wave calculator inputs
  */
 function initWaveInputs() {
-    const debouncedUpdate = debounce(() => Wave.updateUI(), 150);
-
-    // X value slider and number input
-    const xSlider = document.getElementById('wave-xSlider');
-    const xNumber = document.getElementById('wave-xValue');
-
-    xSlider.addEventListener('input', () => {
-        xNumber.value = xSlider.value;
-        debouncedUpdate();
-    });
-
-    xNumber.addEventListener('input', () => {
-        const val = parseInt(xNumber.value) || 1;
-        xSlider.value = Math.min(Math.max(val, 1), 30);
-        debouncedUpdate();
-    });
-
-    // Listen for deck config changes
-    DeckConfig.onDeckUpdate(() => debouncedUpdate());
+    Wave.init();
 }
 
 /**
  * Initialize Vortex calculator inputs
  */
 function initVortexInputs() {
-    // Vortex calculator has its own init() that handles inputs
     Vortex.init();
 }
 
@@ -230,51 +172,21 @@ function initVortexInputs() {
  * Initialize Lands calculator inputs
  */
 function initLandsInputs() {
-    const debouncedUpdate = debounce(() => Lands.updateUI(), 150);
-
-    // Listen for deck config changes
-    DeckConfig.onDeckUpdate(() => debouncedUpdate());
+    Lands.init();
 }
 
 /**
  * Initialize Rashmi calculator inputs
  */
 function initRashmiInputs() {
-    const debouncedUpdate = debounce(() => Rashmi.updateUI(), 150);
+    Rashmi.init();
+}
 
-    // CMC value slider and number input
-    const cmcSlider = document.getElementById('rashmi-cmcSlider');
-    const cmcNumber = document.getElementById('rashmi-cmcValue');
-    const excludeXCheckbox = document.getElementById('rashmi-exclude-x');
-
-    cmcSlider.addEventListener('input', () => {
-        cmcNumber.value = cmcSlider.value;
-        debouncedUpdate();
-    });
-
-    cmcNumber.addEventListener('input', () => {
-        const val = parseInt(cmcNumber.value) || 1;
-        cmcSlider.value = Math.min(Math.max(val, 1), 15);
-        debouncedUpdate();
-    });
-
-    // Exclude X spells checkbox
-    if (excludeXCheckbox) {
-        excludeXCheckbox.addEventListener('change', () => {
-            debouncedUpdate();
-        });
-    }
-
-    // Sample reveals button
-    const rashmiDrawRevealsBtn = document.getElementById('rashmi-draw-reveals-btn');
-    if (rashmiDrawRevealsBtn) {
-        rashmiDrawRevealsBtn.addEventListener('click', () => {
-            Rashmi.runSampleReveals();
-        });
-    }
-
-    // Listen for deck config changes
-    DeckConfig.onDeckUpdate(() => debouncedUpdate());
+/**
+ * Initialize Mulligan calculator inputs
+ */
+function initMulliganInputs() {
+    Mulligan.init();
 }
 
 
@@ -330,6 +242,7 @@ function init() {
     initVortexInputs();
     initLandsInputs();
     initRashmiInputs();
+    initMulliganInputs();
     initServiceWorker();
     initUXEnhancements();
 

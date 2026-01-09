@@ -4,7 +4,9 @@
  */
 
 import { drawType, drawTypeMin } from '../utils/hypergeometric.js';
-import { formatNumber, formatPercentage, createCache, getChartAnimationConfig } from '../utils/simulation.js';
+import { formatNumber, formatPercentage, createCache, debounce } from '../utils/simulation.js';
+import { renderMultiColumnTable } from '../utils/tableUtils.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 
 let simulationCache = createCache(100);
@@ -162,52 +164,41 @@ function updateOpeningHandChart(config, openingHands) {
         d.lands === openingHands.median ? 'rgba(74, 222, 128, 0.8)' : 'rgba(74, 222, 128, 0.4)'
     );
 
-    if (!openingHandChart) {
-        openingHandChart = new Chart(document.getElementById('lands-opening-chart'), {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Probability (%)',
-                    data,
-                    backgroundColor: backgroundColors,
-                    borderColor: '#4ade80',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => `Probability: ${ctx.parsed.y.toFixed(2)}%`
-                        }
-                    }
+    openingHandChart = createOrUpdateChart(openingHandChart, 'lands-opening-chart', {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Probability (%)',
+                data,
+                backgroundColor: backgroundColors,
+                borderColor: '#4ade80',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: 'Probability (%)', color: '#4ade80' },
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#4ade80' }
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: { display: true, text: 'Probability (%)', color: '#4ade80' },
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#4ade80' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#a09090' }
+                x: {
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#a09090' }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `Probability: ${ctx.parsed.y.toFixed(2)}%`
                     }
                 }
             }
-        });
-    } else {
-        openingHandChart.data.labels = labels;
-        openingHandChart.data.datasets[0].data = data;
-        openingHandChart.data.datasets[0].backgroundColor = backgroundColors;
-        openingHandChart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -218,78 +209,59 @@ function updateLandDropChart(config, landDropByTurn, landDropMiss) {
     const makeData = landDropByTurn.map(d => d.makeProbability * 100);
     const missData = landDropByTurn.map(d => d.missProbability * 100);
 
-    if (!landDropChart) {
-        landDropChart = new Chart(document.getElementById('lands-landdrop-chart'), {
-            type: 'line',
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: 'Make Land Drop',
-                        data: makeData,
-                        borderColor: '#4ade80',
-                        backgroundColor: 'rgba(74, 222, 128, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
-                        pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#4ade80')
-                    },
-                    {
-                        label: 'Miss Land Drop',
-                        data: missData,
-                        borderColor: '#dc2626',
-                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
-                        pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#dc2626')
-                    }
-                ]
+    landDropChart = createOrUpdateChart(landDropChart, 'lands-landdrop-chart', {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Make Land Drop',
+                    data: makeData,
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
+                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#4ade80')
+                },
+                {
+                    label: 'Miss Land Drop',
+                    data: missData,
+                    borderColor: '#dc2626',
+                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4),
+                    pointBackgroundColor: landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#dc2626')
+                }
+            ]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: 'Probability (%)', color: '#4ade80' },
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#4ade80' }
+                },
+                x: {
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#a09090' }
+                }
             },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                const label = ctx.dataset.label;
-                                return `${label}: ${ctx.parsed.y.toFixed(1)}%`;
-                            }
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const label = ctx.dataset.label;
+                            return `${label}: ${ctx.parsed.y.toFixed(1)}%`;
                         }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: { display: true, text: 'Probability (%)', color: '#4ade80' },
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#4ade80' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#a09090' }
                     }
                 }
             }
-        });
-    } else {
-        landDropChart.data.labels = labels;
-        landDropChart.data.datasets[0].data = makeData;
-        landDropChart.data.datasets[0].pointRadius = landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4);
-        landDropChart.data.datasets[0].pointBackgroundColor = landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#4ade80');
-        landDropChart.data.datasets[1].data = missData;
-        landDropChart.data.datasets[1].pointRadius = landDropByTurn.map(d => d.turn === landDropMiss ? 8 : 4);
-        landDropChart.data.datasets[1].pointBackgroundColor = landDropByTurn.map(d => d.turn === landDropMiss ? '#fff' : '#dc2626');
-        landDropChart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -299,38 +271,17 @@ function updateStatsTable(config, openingHands, landDropMiss, landDropByTurn) {
     const expectedTurn = landDropMiss === Infinity ? 'Never' : `Turn ${landDropMiss}`;
     const medianLands = openingHands.median;
 
-    let tableHTML = `
-        <tr>
-            <th>Metric</th>
-            <th>Value</th>
-        </tr>
-        <tr>
-            <td>Deck Size</td>
-            <td>${config.deckSize}</td>
-        </tr>
-        <tr>
-            <td>Lands in Deck</td>
-            <td>${config.landCount} (${((config.landCount / config.deckSize) * 100).toFixed(1)}%)</td>
-        </tr>
-        <tr class="current">
-            <td>Expected Land Drop Miss</td>
-            <td>${expectedTurn}</td>
-        </tr>
-        <tr class="current">
-            <td>Median Opening Hand Lands</td>
-            <td>${medianLands}</td>
-        </tr>
-        <tr>
-            <td>P(2-4 lands in opener)</td>
-            <td>${formatPercentage(openingHands.distribution.slice(2, 5).reduce((sum, d) => sum + d.probability, 0))}</td>
-        </tr>
-        <tr>
-            <td>P(Make Turn 3 Drop)</td>
-            <td>${formatPercentage(landDropByTurn[2].makeProbability)}</td>
-        </tr>
-    `;
+    const headers = ['Metric', 'Value'];
+    const rows = [
+        ['Deck Size', config.deckSize],
+        ['Lands in Deck', `${config.landCount} (${((config.landCount / config.deckSize) * 100).toFixed(1)}%)`],
+        { cells: ['Expected Land Drop Miss', expectedTurn], class: 'current' },
+        { cells: ['Median Opening Hand Lands', medianLands], class: 'current' },
+        ['P(2-4 lands in opener)', formatPercentage(openingHands.distribution.slice(2, 5).reduce((sum, d) => sum + d.probability, 0))],
+        ['P(Make Turn 3 Drop)', formatPercentage(landDropByTurn[2].makeProbability)]
+    ];
 
-    document.getElementById('lands-statsTable').innerHTML = tableHTML;
+    renderMultiColumnTable('lands-statsTable', headers, rows);
 }
 
 /**
@@ -342,11 +293,26 @@ export function updateUI() {
     if (!openingHands || !landDropByTurn) {
         if (openingHandChart) openingHandChart.destroy();
         if (landDropChart) landDropChart.destroy();
-        document.getElementById('lands-statsTable').innerHTML = '<tr><td>Configure deck with lands to see results</td></tr>';
+        const table = document.getElementById('lands-statsTable');
+        if (table) table.innerHTML = '<tr><td>Configure deck with lands to see results</td></tr>';
         return;
     }
 
     updateOpeningHandChart(config, openingHands);
     updateLandDropChart(config, landDropByTurn, landDropMiss);
     updateStatsTable(config, openingHands, landDropMiss, landDropByTurn);
+}
+
+/**
+ * Initialize Lands calculator
+ */
+export function init() {
+    const debouncedUpdate = debounce(() => updateUI(), 150);
+
+    // Listen for deck configuration changes
+    DeckConfig.onDeckUpdate(() => {
+        debouncedUpdate();
+    });
+
+    updateUI();
 }

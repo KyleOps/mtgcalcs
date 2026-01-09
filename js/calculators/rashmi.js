@@ -3,7 +3,10 @@
  * Calculates probability of getting a free spell when casting with Rashmi
  */
 
-import { createCache, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
+import { createCache, formatNumber, formatPercentage, debounce } from '../utils/simulation.js';
+import { renderMultiColumnTable } from '../utils/tableUtils.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
+import { bindInputSync } from '../utils/ui.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 import {
     buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
@@ -317,95 +320,57 @@ function updateChart(config, results) {
     const probFreeSpellData = cmcValues.map(cmc => results[cmc].probFreeSpell * 100);
     const expectedCmcData = cmcValues.map(cmc => results[cmc].expectedCmc);
 
-    if (!chart) {
-        // First time: create chart
-        chart = new Chart(document.getElementById('rashmi-chart'), {
-            type: 'line',
-            data: {
-                labels: cmcValues.map(cmc => 'CMC ' + cmc),
-                datasets: [
-                    {
-                        label: 'P(Free Spell) %',
-                        data: probFreeSpellData,
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4),
-                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#22c55e'),
-                        yAxisID: 'yProb'
-                    },
-                    {
-                        label: 'Expected Free CMC',
-                        data: expectedCmcData,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4),
-                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#3b82f6'),
-                        yAxisID: 'yCmc'
-                    }
-                ]
-            },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
+    chart = createOrUpdateChart(chart, 'rashmi-chart', {
+        type: 'line',
+        data: {
+            labels: cmcValues.map(cmc => 'CMC ' + cmc),
+            datasets: [
+                {
+                    label: 'P(Free Spell) %',
+                    data: probFreeSpellData,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4),
+                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#22c55e'),
+                    yAxisID: 'yProb'
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                if (ctx.datasetIndex === 0) {
-                                    return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
-                                } else {
-                                    return `Avg free CMC: ${ctx.parsed.y.toFixed(2)}`;
-                                }
-                            }
-                        }
-                    }
+                {
+                    label: 'Expected Free CMC',
+                    data: expectedCmcData,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4),
+                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#3b82f6'),
+                    yAxisID: 'yCmc'
+                }
+            ]
+        },
+        options: {
+            scales: {
+                yProb: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: 'P(Free Spell) %', color: '#22c55e' },
+                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                    ticks: { color: '#22c55e' }
                 },
-                scales: {
-                    yProb: {
-                        type: 'linear',
-                        position: 'left',
-                        beginAtZero: true,
-                        max: 100,
-                        title: { display: true, text: 'P(Free Spell) %', color: '#22c55e' },
-                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                        ticks: { color: '#22c55e' }
-                    },
-                    yCmc: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        title: { display: true, text: 'Expected Free CMC', color: '#3b82f6' },
-                        grid: { drawOnChartArea: false },
-                        ticks: { color: '#3b82f6' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                        ticks: { color: '#a09090' }
-                    }
+                yCmc: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Expected Free CMC', color: '#3b82f6' },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#3b82f6' }
                 }
             }
-        });
-    } else {
-        // Subsequent times: update data without recreating
-        chart.data.labels = cmcValues.map(cmc => 'CMC ' + cmc);
-        chart.data.datasets[0].data = probFreeSpellData;
-        chart.data.datasets[0].pointRadius = cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4);
-        chart.data.datasets[0].pointBackgroundColor = cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#22c55e');
-        chart.data.datasets[1].data = expectedCmcData;
-        chart.data.datasets[1].pointRadius = cmcValues.map(cmc => cmc === config.castCmc ? 8 : 4);
-        chart.data.datasets[1].pointBackgroundColor = cmcValues.map(cmc => cmc === config.castCmc ? '#fff' : '#3b82f6');
-        chart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -415,38 +380,29 @@ function updateChart(config, results) {
  */
 function updateTable(config, results) {
     const cmcValues = Object.keys(results).map(Number).sort((a, b) => a - b);
-    const currentResult = results[config.castCmc];
-
-    let tableHTML = `
-        <tr>
-            <th>Cast CMC</th>
-            <th>P(Free Spell)</th>
-            <th>P(Whiff)</th>
-            <th>Avg Free CMC</th>
-            <th>Value Ratio</th>
-        </tr>
-    `;
-
-    cmcValues.forEach((cmc) => {
+    
+    const headers = ['Cast CMC', 'P(Free Spell)', 'P(Whiff)', 'Avg Free CMC', 'Value Ratio'];
+    
+    const rows = cmcValues.map(cmc => {
         const r = results[cmc];
-        const rowClass = cmc === config.castCmc ? 'current' : '';
-
-        // Value ratio: expected free CMC / cast CMC
         const valueRatio = cmc > 0 ? r.expectedCmc / cmc : 0;
         const ratioClass = valueRatio > 0.5 ? 'marginal-positive' : (valueRatio > 0.25 ? '' : 'marginal-negative');
-
-        tableHTML += `
-            <tr class="${rowClass}">
-                <td>${cmc}</td>
-                <td>${formatPercentage(r.probFreeSpell)}</td>
-                <td>${formatPercentage(r.probWhiff)}</td>
-                <td>${formatNumber(r.expectedCmc)}</td>
-                <td class="${ratioClass}">${formatNumber(valueRatio, 3)}</td>
-            </tr>
-        `;
+        
+        return {
+            cells: [
+                cmc,
+                formatPercentage(r.probFreeSpell),
+                formatPercentage(r.probWhiff),
+                formatNumber(r.expectedCmc),
+                { value: formatNumber(valueRatio, 3), class: ratioClass }
+            ],
+            class: cmc === config.castCmc ? 'current' : ''
+        };
     });
 
-    document.getElementById('rashmi-comparisonTable').innerHTML = tableHTML;
+    renderMultiColumnTable('rashmi-comparisonTable', headers, rows, { 
+        highlightRowIndex: cmcValues.indexOf(config.castCmc) 
+    });
 }
 
 /**
@@ -558,45 +514,67 @@ export function updateUI() {
 }
 
 /**
+
  * Initialize Rashmi calculator
+
  */
+
 export function init() {
+
+    const debouncedUpdate = debounce(() => updateUI(), 150);
+
+
+
     // Bind CMC slider and input
-    const cmcSlider = document.getElementById('rashmi-cmcSlider');
-    const cmcValue = document.getElementById('rashmi-cmcValue');
-    const excludeCheckbox = document.getElementById('rashmi-exclude-x');
 
-    if (cmcSlider && cmcValue) {
-        cmcSlider.addEventListener('input', (e) => {
-            cmcValue.value = e.target.value;
-            updateUI();
-        });
+    bindInputSync('rashmi-cmcSlider', 'rashmi-cmcValue', (val) => {
 
-        cmcValue.addEventListener('input', (e) => {
-            const value = parseInt(e.target.value) || 1;
-            cmcSlider.value = Math.max(1, Math.min(value, 15));
-            updateUI();
-        });
-    }
+        debouncedUpdate();
 
-    if (excludeCheckbox) {
-        excludeCheckbox.addEventListener('change', () => {
-            updateUI();
-        });
-    }
-
-    // Bind sample reveal button
-    const revealBtn = document.getElementById('rashmi-draw-reveals-btn');
-    if (revealBtn) {
-        revealBtn.addEventListener('click', () => {
-            runSampleReveals();
-        });
-    }
-
-    // Listen for deck configuration changes
-    DeckConfig.onDeckUpdate(() => {
-        updateUI();
     });
 
+
+
+    const excludeCheckbox = document.getElementById('rashmi-exclude-x');
+
+    if (excludeCheckbox) {
+
+        excludeCheckbox.addEventListener('change', () => {
+
+            debouncedUpdate();
+
+        });
+
+    }
+
+
+
+    // Bind sample reveal button
+
+    const revealBtn = document.getElementById('rashmi-draw-reveals-btn');
+
+    if (revealBtn) {
+
+        revealBtn.addEventListener('click', () => {
+
+            runSampleReveals();
+
+        });
+
+    }
+
+
+
+    // Listen for deck configuration changes
+
+    DeckConfig.onDeckUpdate(() => {
+
+        debouncedUpdate();
+
+    });
+
+
+
     updateUI();
+
 }

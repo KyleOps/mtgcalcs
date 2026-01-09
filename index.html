@@ -139,6 +139,10 @@
                     <span class="selector-option-icon">🏔️</span>
                     <span>Land Drops</span>
                 </div>
+                <div class="selector-option" data-tab="mulligan" role="menuitem">
+                    <span class="selector-option-icon">🃏</span>
+                    <span>Mulligan Strategy</span>
+                </div>
             </div>
         </div>
 
@@ -161,6 +165,9 @@
             </button>
             <button class="tab-button rashmi" data-tab="rashmi" aria-pressed="false">
                 🌌 Rashmi
+            </button>
+            <button class="tab-button mulligan" data-tab="mulligan" aria-pressed="false">
+                🃏 Mulligan Strategy
             </button>
         </nav>
 
@@ -341,6 +348,15 @@
                             <input type="number" id="vortex-cmcValue" value="6" min="3" max="15" class="x-number" aria-label="Creature CMC number input">
                         </div>
                     </div>
+                    <div class="input-group" style="margin-top: var(--spacing-md);">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="vortex-star-power" style="width: auto; cursor: pointer;" checked>
+                            <span>Treat */* creatures (X/X) as Power 5+</span>
+                        </label>
+                        <small style="color: var(--text-dim); display: block; margin-top: 4px; margin-left: 24px;">
+                            Assume dynamic power creatures (like Lumra, Ashaya) are big enough to chain
+                        </small>
+                    </div>
                 </section>
 
 
@@ -489,6 +505,74 @@
                     <h2>🔍 Cast CMC Comparison</h2>
                     <div class="table-wrapper">
                         <table class="comparison-table" id="rashmi-comparisonTable">
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- MULLIGAN TAB -->
+        <div id="mulligan-tab" class="tab-content" role="tabpanel" aria-labelledby="mulligan">
+            <h1>🃏 Mulligan Strategy Calculator</h1>
+            <p class="card-text">"Should I keep this hand?"</p>
+
+            <div class="main-grid single-column">
+                <section class="panel" aria-label="Configuration">
+                    <h2>⚙️ Card Type Requirements</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 16px;">
+                        Define what you need in your opening hand. Add card types (e.g. Lands, Creatures) and set your requirements.
+                    </p>
+                    
+                    <div id="mull-types-container">
+                        <!-- Dynamic type rows will be inserted here -->
+                    </div>
+
+                    <button id="mull-add-type" class="import-btn" style="margin-top: 12px; width: 100%;">
+                        + Add Another Card Type
+                    </button>
+
+                    <div class="input-group" style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                        <label for="mull-penalty">Mulligan Penalty per Card Lost</label>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <input type="range" id="mull-penalty" value="0.2" min="0" max="0.5" step="0.05" style="flex: 1;">
+                            <span id="mull-penalty-display" style="min-width: 40px; text-align: right; color: var(--text-light);">20%</span>
+                        </div>
+                        <small style="color: var(--text-dim);">How much does going down a card hurt your win rate?</small>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 12px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="mull-free" checked>
+                            <span>First Mulligan is Free (Commander / Multiplayer)</span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Strategy Summary">
+                    <h2>📊 Strategy Summary</h2>
+                    <div id="mull-summary">
+                        <!-- Summary stats will be inserted here -->
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Success Probability Chart">
+                    <h2>📈 Success Probability by Mulligan</h2>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="mull-chart" role="img" aria-label="Mulligan success chart"></canvas>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Turn-by-Turn Probability">
+                    <h2>📅 Probability by Turn</h2>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="mull-turn-chart" role="img" aria-label="Turn probability chart"></canvas>
+                    </div>
+                </section>
+
+                <section class="panel" aria-label="Strategy Table">
+                    <h2>📝 Hand Decision Table</h2>
+                    <div class="table-wrapper">
+                        <table class="comparison-table" id="mull-strategyTable">
                         </table>
                     </div>
                 </section>

@@ -3,7 +3,10 @@
  * Simulates card type diversity for Portent of Calamity spell
  */
 
-import { createCache, partialShuffle, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
+import { createCache, partialShuffle, formatNumber, formatPercentage, debounce } from '../utils/simulation.js';
+import { renderMultiColumnTable } from '../utils/tableUtils.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
+import { bindInputSync } from '../utils/ui.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 import { renderDistributionChart } from '../utils/sampleSimulator.js';
 
@@ -195,95 +198,74 @@ function updateChart(config, results) {
     const prob4PlusData = xValues.map(x => results[x].prob4Plus * 100);
     const expectedTypesData = xValues.map(x => results[x].expectedTypes);
 
-    if (!chart) {
-        // First time: create chart
-        chart = new Chart(document.getElementById('portent-combinedChart'), {
-            type: 'line',
-            data: {
-                labels: xValues.map(x => 'X=' + x),
-                datasets: [
-                    {
-                        label: 'P(Free Spell) %',
-                        data: prob4PlusData,
-                        borderColor: '#c084fc',
-                        backgroundColor: 'rgba(192, 132, 252, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
-                        yAxisID: 'yProb'
-                    },
-                    {
-                        label: 'Types Exiled',
-                        data: expectedTypesData,
-                        borderColor: '#dc2626',
-                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: xValues.map(x => x === config.x ? 8 : 4),
-                        pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
-                        yAxisID: 'yTypes'
-                    }
-                ]
-            },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
+    chart = createOrUpdateChart(chart, 'portent-combinedChart', {
+        type: 'line',
+        data: {
+            labels: xValues.map(x => 'X=' + x),
+            datasets: [
+                {
+                    label: 'P(Free Spell) %',
+                    data: prob4PlusData,
+                    borderColor: '#c084fc',
+                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#c084fc'),
+                    yAxisID: 'yProb'
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                if (ctx.datasetIndex === 0) {
-                                    return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
-                                } else {
-                                    return `Types exiled: ${ctx.parsed.y.toFixed(2)}`;
-                                }
+                {
+                    label: 'Types Exiled',
+                    data: expectedTypesData,
+                    borderColor: '#dc2626',
+                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: xValues.map(x => x === config.x ? 8 : 4),
+                    pointBackgroundColor: xValues.map(x => x === config.x ? '#fff' : '#dc2626'),
+                    yAxisID: 'yTypes'
+                }
+            ]
+        },
+        options: {
+            scales: {
+                yProb: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
+                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                    ticks: { color: '#c084fc' }
+                },
+                yTypes: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Types Exiled', color: '#dc2626' },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#dc2626' }
+                },
+                x: {
+                    grid: { color: 'rgba(139, 0, 0, 0.2)' },
+                    ticks: { color: '#a09090' }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.datasetIndex === 0) {
+                                return `Free spell: ${ctx.parsed.y.toFixed(1)}%`;
+                            } else {
+                                return `Types exiled: ${ctx.parsed.y.toFixed(2)}`;
                             }
                         }
                     }
-                },
-                scales: {
-                    yProb: {
-                        type: 'linear',
-                        position: 'left',
-                        beginAtZero: true,
-                        max: 100,
-                        title: { display: true, text: 'P(Free Spell) %', color: '#c084fc' },
-                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                        ticks: { color: '#c084fc' }
-                    },
-                    yTypes: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        title: { display: true, text: 'Types Exiled', color: '#dc2626' },
-                        grid: { drawOnChartArea: false },
-                        ticks: { color: '#dc2626' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(139, 0, 0, 0.2)' },
-                        ticks: { color: '#a09090' }
-                    }
                 }
             }
-        });
-    } else {
-        // Subsequent times: update data without recreating
-        chart.data.labels = xValues.map(x => 'X=' + x);
-        chart.data.datasets[0].data = prob4PlusData;
-        chart.data.datasets[0].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
-        chart.data.datasets[0].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#c084fc');
-        chart.data.datasets[1].data = expectedTypesData;
-        chart.data.datasets[1].pointRadius = xValues.map(x => x === config.x ? 8 : 4);
-        chart.data.datasets[1].pointBackgroundColor = xValues.map(x => x === config.x ? '#fff' : '#dc2626');
-        chart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -295,43 +277,31 @@ function updateTable(config, results) {
     const xValues = Object.keys(results).map(Number).sort((a, b) => a - b);
     const currentResult = results[config.x];
 
-    let tableHTML = `
-        <tr>
-            <th>X</th>
-            <th>P(Free Spell)</th>
-            <th>Δ Prob</th>
-            <th>Types Exiled</th>
-            <th>Δ Types</th>
-        </tr>
-    `;
-
-    xValues.forEach((x) => {
+    const headers = ['X', 'P(Free Spell)', 'Δ Prob', 'Types Exiled', 'Δ Types'];
+    
+    const rows = xValues.map(x => {
         const r = results[x];
         const deltaProb = (r.prob4Plus - currentResult.prob4Plus) * 100;
         const deltaTypes = r.expectedTypes - currentResult.expectedTypes;
-
-        const rowClass = x === config.x ? 'current' : '';
         const isBaseline = x === config.x;
-
         const probClass = deltaProb > 0.01 ? 'marginal-positive' : (deltaProb < -0.01 ? 'marginal-negative' : '');
         const typesClass = deltaTypes > 0.001 ? 'marginal-negative' : (deltaTypes < -0.001 ? 'marginal-positive' : '');
 
-        tableHTML += `
-            <tr class="${rowClass}">
-                <td>${x}</td>
-                <td>${formatPercentage(r.prob4Plus)}</td>
-                <td class="${probClass}">
-                    ${isBaseline ? '-' : (deltaProb >= 0 ? '+' : '') + deltaProb.toFixed(1) + '%'}
-                </td>
-                <td>${formatNumber(r.expectedTypes, 2)}</td>
-                <td class="${typesClass}">
-                    ${isBaseline ? '-' : (deltaTypes >= 0 ? '+' : '') + formatNumber(deltaTypes, 2)}
-                </td>
-            </tr>
-        `;
+        return {
+            cells: [
+                x,
+                formatPercentage(r.prob4Plus),
+                { value: isBaseline ? '-' : (deltaProb >= 0 ? '+' : '') + deltaProb.toFixed(1) + '%', class: probClass },
+                formatNumber(r.expectedTypes, 2),
+                { value: isBaseline ? '-' : (deltaTypes >= 0 ? '+' : '') + formatNumber(deltaTypes, 2), class: typesClass }
+            ],
+            class: isBaseline ? 'current' : ''
+        };
     });
 
-    document.getElementById('portent-comparisonTable').innerHTML = tableHTML;
+    renderMultiColumnTable('portent-comparisonTable', headers, rows, { 
+        highlightRowIndex: xValues.indexOf(config.x) 
+    });
 }
 
 /**
@@ -582,6 +552,28 @@ export function updateUI() {
 }
 
 /**
- * Update deck inputs from imported data
- * @param {Object} typeCounts - Type counts from import
+ * Initialize Portent calculator
  */
+export function init() {
+    const debouncedUpdate = debounce(() => updateUI(), 150);
+
+    // Bind X value slider and number input
+    bindInputSync('portent-xSlider', 'portent-xValue', (val) => {
+        debouncedUpdate();
+    });
+
+    // Bind sample reveal button
+    const portentDrawRevealsBtn = document.getElementById('portent-draw-reveals-btn');
+    if (portentDrawRevealsBtn) {
+        portentDrawRevealsBtn.addEventListener('click', () => {
+            runSampleReveals();
+        });
+    }
+
+    // Listen for deck configuration changes
+    DeckConfig.onDeckUpdate(() => {
+        debouncedUpdate();
+    });
+
+    updateUI();
+}

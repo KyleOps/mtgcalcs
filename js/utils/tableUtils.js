@@ -1,73 +1,73 @@
 /**
  * Table Rendering Utilities
- * Shared functions for creating comparison tables
+ * Shared functions for creating and rendering consistent comparison tables
  */
 
 /**
- * Create a comparison table with two columns
- * @param {Array} rows - Array of {label, value} objects
- * @param {string} highlightClass - Optional class for highlighting rows
- * @returns {string} - HTML table string
+ * Render a multi-column comparison table to a DOM element
+ * @param {string} elementId - ID of the container element
+ * @param {Array<string>} headers - Array of header text
+ * @param {Array<Array<string|number|Object>>} rows - Array of rows, where each cell can be a value or {value, class}
+ * @param {Object} options - formatting options (highlightRowIndex, tableClass)
  */
-export function createComparisonTable(rows, highlightClass = 'current') {
-    let html = '<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>';
+export function renderMultiColumnTable(elementId, headers, rows, options = {}) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
 
-    rows.forEach(row => {
-        const rowClass = row.highlight ? highlightClass : '';
-        html += `
-            <tr${rowClass ? ` class="${rowClass}"` : ''}>
-                <td>${row.label}</td>
-                <td>${row.value}</td>
-            </tr>
-        `;
-    });
+    const { highlightRowIndex = -1, tableClass = 'comparison-table' } = options;
 
-    html += '</tbody>';
-    return html;
-}
-
-/**
- * Create a multi-column comparison table
- * @param {Array} headers - Array of header strings
- * @param {Array} rows - Array of row arrays
- * @param {number} highlightRow - Index of row to highlight (optional)
- * @returns {string} - HTML table string
- */
-export function createMultiColumnTable(headers, rows, highlightRow = -1) {
-    let html = '<thead><tr>';
+    let html = `<table class="${tableClass}">`;
+    
+    // Header
+    html += '<thead><tr>';
     headers.forEach(header => {
         html += `<th>${header}</th>`;
     });
-    html += '</tr></thead><tbody>';
+    html += '</tr></thead>';
 
+    // Body
+    html += '<tbody>';
     rows.forEach((row, index) => {
-        const rowClass = index === highlightRow ? 'current' : '';
-        html += `<tr${rowClass ? ` class="${rowClass}"` : ''}>`;
-        row.forEach(cell => {
-            html += `<td>${cell}</td>`;
+        // Determine row class
+        let rowClass = index === highlightRowIndex ? 'current' : '';
+        
+        // Check if row has custom class in its metadata (if row is passed as object with data)
+        // For simplicity, we assume row is array of cells. If you need row-level data, 
+        // we can check if the first cell or a special property indicates it.
+        // For now, let's stick to array of cells.
+
+        // Allow entire row to be an object { cells: [], class: '...' }
+        let cells = row;
+        if (!Array.isArray(row) && row.cells) {
+            cells = row.cells;
+            if (row.class) rowClass += ` ${row.class}`;
+        }
+
+        html += `<tr class="${rowClass.trim()}">`;
+        
+        cells.forEach(cell => {
+            let value = cell;
+            let cellClass = '';
+            
+            // Allow cell to be { value: '...', class: '...' }
+            if (cell !== null && typeof cell === 'object' && cell.value !== undefined) {
+                value = cell.value;
+                cellClass = cell.class || '';
+            }
+            
+            html += `<td class="${cellClass}">${value}</td>`;
         });
+        
         html += '</tr>';
     });
+    html += '</tbody></table>';
 
-    html += '</tbody>';
-    return html;
+    container.innerHTML = html;
 }
 
 /**
- * Render a table to a DOM element
- * @param {string} elementId - ID of table element
- * @param {string} tableHTML - HTML string to render
- */
-export function renderTable(elementId, tableHTML) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.innerHTML = tableHTML;
-    }
-}
-
-/**
- * Clear a table
- * @param {string} elementId - ID of table element
+ * Clear a table container
+ * @param {string} elementId - ID of table container
  */
 export function clearTable(elementId) {
     const element = document.getElementById(elementId);

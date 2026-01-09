@@ -3,7 +3,9 @@
  * Simulates permanents played with Primal Surge
  */
 
-import { formatNumber, formatPercentage, createCache, getChartAnimationConfig } from '../utils/simulation.js';
+import { formatNumber, formatPercentage, createCache, debounce } from '../utils/simulation.js';
+import { renderMultiColumnTable } from '../utils/tableUtils.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 import {
     buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
@@ -86,14 +88,43 @@ export function getDeckConfig() {
     const nonPermanents = config.instants + config.sorceries;
     const permanents = deckSize - nonPermanents;
 
+    let lands = 0;
+    let totalPermCMC = 0;
+
+    if (cardData && cardData.cardsByName && Object.keys(cardData.cardsByName).length > 0) {
+        Object.values(cardData.cardsByName).forEach(card => {
+            const typeLine = (card.type_line || '').toLowerCase();
+            const hasPermType = ['creature', 'artifact', 'enchantment', 'planeswalker', 'battle', 'land'].some(t => typeLine.includes(t));
+            
+            if (hasPermType) {
+                if (typeLine.includes('land')) {
+                    lands += card.count;
+                }
+                if (card.cmc) {
+                    totalPermCMC += card.cmc * card.count;
+                }
+            }
+        });
+    } else {
+        // Fallback for manual config
+        lands = config.lands;
+        // Estimate CMC from buckets (using weighted averages)
+        totalPermCMC = (config.cmc0 || 0) * 0 +
+                       (config.cmc2 || 0) * 2 +
+                       (config.cmc3 || 0) * 3 +
+                       (config.cmc4 || 0) * 4 +
+                       (config.cmc5 || 0) * 5 +
+                       (config.cmc6 || 0) * 7;
+    }
+
     // Clear cache if deck changed
-    const newHash = `${deckSize}-${nonPermanents}-${permanents}`;
+    const newHash = `${deckSize}-${nonPermanents}-${permanents}-${lands}-${totalPermCMC}`;
     if (newHash !== lastDeckHash) {
         simulationCache.clear();
         lastDeckHash = newHash;
     }
 
-    return { deckSize, nonPermanents, permanents, cardData };
+    return { deckSize, nonPermanents, permanents, cardData, lands, totalPermCMC };
 }
 
 /**
@@ -120,7 +151,9 @@ export function calculate() {
 function updateChart(config, result) {
     const nonPermRange = [];
     const expectedPermsData = [];
-    const percentData = [];
+    const expectedMVData = [];
+
+    const avgMVPerPerm = config.permanents > 0 ? config.totalPermCMC / config.permanents : 0;
 
     // Show results for different numbers of non-permanents
     const maxNonPerm = Math.min(20, Math.floor(config.deckSize * 0.3));
@@ -128,98 +161,63 @@ function updateChart(config, result) {
         const sim = simulatePrimalSurge(config.deckSize, i, config.deckSize - i);
         nonPermRange.push(i);
         expectedPermsData.push(sim.expectedPermanents);
-        percentData.push(sim.percentOfDeck);
+        expectedMVData.push(sim.expectedPermanents * avgMVPerPerm);
     }
 
-    if (!chart) {
-        // First time: create chart
-        chart = new Chart(document.getElementById('surge-chart'), {
-            type: 'line',
-            data: {
-                labels: nonPermRange.map(x => x + ' non-perm'),
-                datasets: [
-                    {
-                        label: 'Expected Permanents',
-                        data: expectedPermsData,
-                        borderColor: '#4ade80',
-                        backgroundColor: 'rgba(74, 222, 128, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
-                        pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80'),
-                        yAxisID: 'yPerms'
-                    },
-                    {
-                        label: '% of Deck',
-                        data: percentData,
-                        borderColor: '#dc2626',
-                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
-                        pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626'),
-                        yAxisID: 'yPercent'
-                    }
-                ]
-            },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
+    chart = createOrUpdateChart(chart, 'surge-chart', {
+        type: 'line',
+        data: {
+            labels: nonPermRange.map(x => x + ' non-perm'),
+            datasets: [
+                {
+                    label: 'Expected Permanents',
+                    data: expectedPermsData,
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                    pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80'),
+                    yAxisID: 'yPerms'
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                if (ctx.datasetIndex === 0) {
-                                    return `Expected permanents: ${ctx.parsed.y.toFixed(1)}`;
-                                } else {
-                                    return `% of deck: ${ctx.parsed.y.toFixed(1)}%`;
-                                }
-                            }
-                        }
-                    }
+                {
+                    label: 'Expected Total Mana Value',
+                    data: expectedMVData,
+                    borderColor: '#c084fc',
+                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: nonPermRange.map(x => x === config.nonPermanents ? 8 : 4),
+                    pointBackgroundColor: nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#c084fc'),
+                    yAxisID: 'yMV'
+                }
+            ]
+        },
+        options: {
+            scales: {
+                yPerms: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Expected Permanents', color: '#4ade80' },
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#4ade80' }
                 },
-                scales: {
-                    yPerms: {
-                        type: 'linear',
-                        position: 'left',
-                        beginAtZero: true,
-                        title: { display: true, text: 'Expected Permanents', color: '#4ade80' },
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#4ade80' }
-                    },
-                    yPercent: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        max: 100,
-                        title: { display: true, text: '% of Deck', color: '#dc2626' },
-                        grid: { drawOnChartArea: false },
-                        ticks: { color: '#dc2626' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(34, 197, 94, 0.2)' },
-                        ticks: { color: '#a09090' }
-                    }
+                yMV: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Total Mana Value', color: '#c084fc' },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#c084fc' }
+                },
+                x: {
+                    grid: { color: 'rgba(34, 197, 94, 0.2)' },
+                    ticks: { color: '#a09090' }
                 }
             }
-        });
-    } else {
-        // Subsequent times: update data without recreating
-        chart.data.labels = nonPermRange.map(x => x + ' non-perm');
-        chart.data.datasets[0].data = expectedPermsData;
-        chart.data.datasets[0].pointRadius = nonPermRange.map(x => x === config.nonPermanents ? 8 : 4);
-        chart.data.datasets[0].pointBackgroundColor = nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#4ade80');
-        chart.data.datasets[1].data = percentData;
-        chart.data.datasets[1].pointRadius = nonPermRange.map(x => x === config.nonPermanents ? 8 : 4);
-        chart.data.datasets[1].pointBackgroundColor = nonPermRange.map(x => x === config.nonPermanents ? '#fff' : '#dc2626');
-        chart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -228,38 +226,22 @@ function updateChart(config, result) {
  * @param {Object} result - Calculation result
  */
 function updateTable(config, result) {
-    let tableHTML = `
-        <tr>
-            <th>Metric</th>
-            <th>Value</th>
-        </tr>
-        <tr>
-            <td>Total Cards</td>
-            <td>${config.deckSize}</td>
-        </tr>
-        <tr>
-            <td>Permanents</td>
-            <td>${config.permanents}</td>
-        </tr>
-        <tr>
-            <td>Non-Permanents</td>
-            <td>${config.nonPermanents}</td>
-        </tr>
-        <tr class="current">
-            <td>Expected Permanents Played</td>
-            <td>${formatNumber(result.expectedPermanents)}</td>
-        </tr>
-        <tr class="current">
-            <td>% of Deck Played</td>
-            <td>${formatNumber(result.percentOfDeck, 1)}%</td>
-        </tr>
-        <tr>
-            <td>P(Play Entire Deck)</td>
-            <td>${config.nonPermanents === 0 ? '100%' : formatPercentage(1 / config.deckSize, 2)}</td>
-        </tr>
-    `;
+    const avgLands = config.permanents > 0 ? result.expectedPermanents * (config.lands / config.permanents) : 0;
+    const avgCMC = config.permanents > 0 ? result.expectedPermanents * (config.totalPermCMC / config.permanents) : 0;
 
-    document.getElementById('surge-statsTable').innerHTML = tableHTML;
+    const headers = ['Metric', 'Value'];
+    
+    const rows = [
+        ['Total Cards', config.deckSize],
+        ['Permanents', config.permanents],
+        ['Non-Permanents', config.nonPermanents],
+        { cells: ['Expected Permanents Played', formatNumber(result.expectedPermanents)], class: 'current' },
+        { cells: ['Avg Lands Put In', formatNumber(avgLands, 1)], class: 'current' },
+        { cells: ['Avg Mana Value Put In', formatNumber(avgCMC, 1)], class: 'current' },
+        ['P(Play Entire Deck)', config.nonPermanents === 0 ? '100%' : formatPercentage(1 / config.deckSize, 2)]
+    ];
+
+    renderMultiColumnTable('surge-statsTable', headers, rows);
 }
 
 /**
@@ -331,6 +313,8 @@ export function runSampleReveals() {
     // Run simulations
     let revealsHTML = '';
     let totalPermanents = 0;
+    let totalManaValue = 0;
+    let totalLands = 0;
     const permanentDistribution = new Array(deck.length + 1).fill(0);
 
     for (let i = 0; i < numSims; i++) {
@@ -340,6 +324,8 @@ export function runSampleReveals() {
         // Simulate Primal Surge - count permanents until hit non-permanent
         const revealedCards = [];
         let permanentCount = 0;
+        let runManaValue = 0;
+        let runLands = 0;
 
         for (let j = 0; j < shuffled.length; j++) {
             const card = shuffled[j];
@@ -350,16 +336,21 @@ export function runSampleReveals() {
             if (isNonPermanent) {
                 break; // Stop at first non-permanent
             }
+            
             permanentCount++;
+            if (card.cmc) runManaValue += card.cmc;
+            if (card.types.includes('land')) runLands++;
         }
 
         totalPermanents += permanentCount;
+        totalManaValue += runManaValue;
+        totalLands += runLands;
         permanentDistribution[permanentCount]++;
 
         // Build HTML for this reveal
         const hitNonPermanent = revealedCards[revealedCards.length - 1]?.isNonPermanent;
         revealsHTML += `<div class="sample-reveal ${!hitNonPermanent ? 'free-spell' : 'whiff'}">`;
-        revealsHTML += `<div><strong>Reveal ${i + 1}:</strong></div>`;
+        revealsHTML += `<div><strong>Reveal ${i + 1}:</strong> ${permanentCount} perms (${runLands} lands, ${runManaValue} total CMC)</div>`;
         revealsHTML += '<div style="margin: 8px 0;">';
 
         revealedCards.forEach(card => {
@@ -371,17 +362,18 @@ export function runSampleReveals() {
         revealsHTML += `<div class="reveal-summary ${!hitNonPermanent ? 'free-spell' : 'whiff'}">`;
 
         if (hitNonPermanent) {
-            revealsHTML += `<strong>⛔ Stopped!</strong> - ${permanentCount} permanent${permanentCount !== 1 ? 's' : ''} played`;
+            revealsHTML += `<strong>⛔ Stopped!</strong>`;
         } else {
-            revealsHTML += `<strong>✓ Full Deck!</strong> - All ${permanentCount} permanents played`;
+            revealsHTML += `<strong>✓ Full Deck!</strong>`;
         }
 
         revealsHTML += '</div></div>';
     }
 
-    // Calculate average permanents
+    // Calculate averages
     const avgPermanents = (totalPermanents / numSims).toFixed(2);
-    const avgPercent = ((totalPermanents / numSims / deck.length) * 100).toFixed(1);
+    const avgMana = (totalManaValue / numSims).toFixed(1);
+    const avgLands = (totalLands / numSims).toFixed(1);
 
     // Build distribution chart
     let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
@@ -394,7 +386,7 @@ export function runSampleReveals() {
     );
 
     distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
-    distributionHTML += `<strong>Average permanents played:</strong> ${avgPermanents} (${avgPercent}% of deck)`;
+    distributionHTML += `<strong>Averages:</strong> ${avgPermanents} permanents, ${avgLands} lands, ${avgMana} total CMC`;
     distributionHTML += '</div></div>';
 
     // Make reveals collapsible
@@ -427,6 +419,28 @@ export function updateUI() {
     if (config.cardData && config.cardData.cardsByName && Object.keys(config.cardData.cardsByName).length > 0) {
         runSampleReveals();
     }
+}
+
+/**
+ * Initialize Surge calculator
+ */
+export function init() {
+    const debouncedUpdate = debounce(() => updateUI(), 150);
+
+    // Bind sample reveal button
+    const surgeDrawRevealsBtn = document.getElementById('surge-draw-reveals-btn');
+    if (surgeDrawRevealsBtn) {
+        surgeDrawRevealsBtn.addEventListener('click', () => {
+            runSampleReveals();
+        });
+    }
+
+    // Listen for deck configuration changes
+    DeckConfig.onDeckUpdate(() => {
+        debouncedUpdate();
+    });
+
+    updateUI();
 }
 
 /**

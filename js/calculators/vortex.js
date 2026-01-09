@@ -6,12 +6,32 @@
  * discover X, where X is that spell's mana value."
  */
 
-import { createCache, formatNumber, getChartAnimationConfig } from '../utils/simulation.js';
+import { createCache, formatNumber, debounce } from '../utils/simulation.js';
+import { renderMultiColumnTable } from '../utils/tableUtils.js';
+import { createOrUpdateChart } from '../utils/chartHelpers.js';
+import { bindInputSync } from '../utils/ui.js';
 import * as DeckConfig from '../utils/deckConfig.js';
 import {
     buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
     createCollapsibleSection
 } from '../utils/sampleSimulator.js';
+
+/**
+ * Check if power is 5 or greater, optionally treating * or X as 5+
+ * @param {string|number} powerStr - Power string (e.g. "5", "*", "1+*", "X") or number
+ * @param {boolean} treatStarAs5Plus - Whether to treat * or X as 5+
+ * @returns {boolean}
+ */
+function isCreaturePower5Plus(powerStr, treatStarAs5Plus) {
+    if (powerStr === undefined || powerStr === null) return false;
+    const str = String(powerStr);
+    // Check for * or X
+    if (str.includes('*') || str.includes('X')) {
+        return treatStarAs5Plus;
+    }
+    const p = parseInt(str);
+    return !isNaN(p) && p >= 5;
+}
 
 const CONFIG = {
     ITERATIONS: 20000,
@@ -105,20 +125,9 @@ export function runSampleReveals() {
 
             if (hitCard) {
                 // Determine if it chains
-                // We need to know if it's a creature with power 5+
-                // The card object from `buildDeckFromCardData` has `power`.
-                // Check if power >= 5.
-                let powerNum = -1;
-                if (hitCard.power !== undefined && hitCard.power !== '*' && !isNaN(parseInt(hitCard.power))) {
-                    powerNum = parseInt(hitCard.power);
-                }
-                
+                const treatStarAs5Plus = document.getElementById('vortex-star-power')?.checked || false;
                 const isCreature = hitCard.types.includes('creature');
-                let isPower5Plus = false;
-                if (isCreature && hitCard.power) {
-                     const p = parseInt(hitCard.power);
-                     if (!isNaN(p) && p >= 5) isPower5Plus = true;
-                }
+                const isPower5Plus = isCreature && isCreaturePower5Plus(hitCard.power, treatStarAs5Plus);
 
                 const chainClass = isPower5Plus ? 'chain-trigger' : '';
                 const chainIcon = isPower5Plus ? ' ⚡' : '';
@@ -252,9 +261,10 @@ function simulateDiscoverChain(deck, discoverCMC, offset = 0, depth = 0) {
  * @param {number} creatureCMC - CMC of the creature being cast
  * @param {number} lands - Number of lands in deck
  * @param {Object} castCreature - The creature being cast (to exclude from pool)
+ * @param {boolean} treatStarAs5Plus - Flag for dynamic power creatures
  */
-function simulateDiscoverForCMC(cardDetails, creatureCMC, lands, castCreature = null) {
-    const cacheKey = `${creatureCMC}-${cardDetails.length}-${lands}-${castCreature ? castCreature.name : 'none'}`;
+function simulateDiscoverForCMC(cardDetails, creatureCMC, lands, castCreature = null, treatStarAs5Plus = false) {
+    const cacheKey = `${creatureCMC}-${cardDetails.length}-${lands}-${castCreature ? castCreature.name : 'none'}-${treatStarAs5Plus}`;
     const cached = simulationCache.get(cacheKey);
     if (cached) return cached;
 
@@ -355,14 +365,31 @@ function simulateDiscoverForCMC(cardDetails, creatureCMC, lands, castCreature = 
  */
 export function getDeckConfig() {
     const config = DeckConfig.getDeckConfig();
+    const treatStarAs5Plus = document.getElementById('vortex-star-power')?.checked || false;
 
     // Check if we have card details (new format) or need to fall back to old format
-    const cardDetails = config.cardDetails || [];
+    // Map details to update isPower5Plus based on checkbox
+    let cardDetails = config.cardDetails || [];
+    
+    // Debug: Check a few cards for power property
+    if (cardDetails.length > 0) {
+        console.log('Vortex Card Details Sample:', cardDetails.slice(0, 3).map(c => ({ name: c.name, power: c.power, isP5: c.isPower5Plus })));
+    }
+
+    if (cardDetails.length > 0) {
+        cardDetails = cardDetails.map(c => ({
+            ...c,
+            isPower5Plus: isCreaturePower5Plus(c.power, treatStarAs5Plus)
+        }));
+    }
+
     const lands = config.lands || 0;
-    const creaturesPower5Plus = config.creaturesPower5Plus || 0;
+    // Recalculate creaturesPower5Plus count based on new logic
+    const creaturesPower5Plus = cardDetails.filter(c => c.isPower5Plus).length;
 
     // Clear cache if deck changed
-    const newHash = JSON.stringify(cardDetails) + lands;
+    // Include checkbox state in hash
+    const newHash = JSON.stringify(cardDetails) + lands + treatStarAs5Plus;
     if (newHash !== lastDeckHash) {
         simulationCache.clear();
         lastDeckHash = newHash;
@@ -385,7 +412,8 @@ export function getDeckConfig() {
         creatureCMC,
         castCreature,
         power5PlusAtCMC, // All power 5+ creatures at this CMC
-        deckSize: cardDetails.length + lands
+        deckSize: cardDetails.length + lands,
+        treatStarAs5Plus
     };
 }
 
@@ -407,7 +435,7 @@ export function calculate() {
         const power5PlusAtThisCMC = config.cardDetails.filter(c => c.cmc === cmc && c.isPower5Plus);
         const creatureToExclude = power5PlusAtThisCMC.length > 0 ? power5PlusAtThisCMC[0] : null;
 
-        const stats = simulateDiscoverForCMC(config.cardDetails, cmc, config.lands, creatureToExclude);
+        const stats = simulateDiscoverForCMC(config.cardDetails, cmc, config.lands, creatureToExclude, config.treatStarAs5Plus);
         results[cmc] = {
             creatureCMC: cmc,
             ...stats
@@ -426,111 +454,72 @@ function updateChart(config, results) {
     const avgSpellCMCData = cmcValues.map(cmc => results[cmc]?.avgSpellCMC || 0);
     const avgSpellsCastData = cmcValues.map(cmc => results[cmc]?.avgSpellsPerTrigger || 0);
 
-    if (!chart) {
-        // First time: create chart
-        chart = new Chart(document.getElementById('vortex-chart'), {
-            type: 'line',
-            data: {
-                labels: cmcValues.map(cmc => `${cmc} CMC`),
-                datasets: [
-                    {
-                        label: 'Avg Free Mana Value',
-                        data: freeManaData,
-                        borderColor: '#f97316',
-                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316'),
-                        yAxisID: 'yMana'
-                    },
-                    {
-                        label: 'Avg Spell CMC Found',
-                        data: avgSpellCMCData,
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e'),
-                        yAxisID: 'yMana'
-                    },
-                    {
-                        label: 'Avg Spells Cast',
-                        data: avgSpellsCastData,
-                        borderColor: '#c084fc',
-                        backgroundColor: 'rgba(192, 132, 252, 0.1)',
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
-                        pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc'),
-                        yAxisID: 'ySpells'
-                    }
-                ]
-            },
-            options: {
-                ...getChartAnimationConfig(),
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
+    chart = createOrUpdateChart(chart, 'vortex-chart', {
+        type: 'line',
+        data: {
+            labels: cmcValues.map(cmc => `${cmc} CMC`),
+            datasets: [
+                {
+                    label: 'Avg Free Mana Value',
+                    data: freeManaData,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316'),
+                    yAxisID: 'yMana'
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => {
-                                if (ctx.datasetIndex === 0) {
-                                    return `Free mana: ${ctx.parsed.y.toFixed(2)} avg`;
-                                } else if (ctx.datasetIndex === 1) {
-                                    return `Spell CMC: ${ctx.parsed.y.toFixed(2)} avg`;
-                                } else {
-                                    return `Spells cast: ${ctx.parsed.y.toFixed(2)} avg`;
-                                }
-                            }
-                        }
-                    }
+                {
+                    label: 'Avg Spell CMC Found',
+                    data: avgSpellCMCData,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e'),
+                    yAxisID: 'yMana'
                 },
-                scales: {
-                    yMana: {
-                        type: 'linear',
-                        position: 'left',
-                        beginAtZero: true,
-                        title: { display: true, text: 'Mana Value', color: '#f97316' },
-                        grid: { color: 'rgba(249, 115, 22, 0.2)' },
-                        ticks: { color: '#f97316' }
-                    },
-                    ySpells: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        max: 3,
-                        title: { display: true, text: 'Spells Cast', color: '#c084fc' },
-                        grid: { display: false },
-                        ticks: { color: '#c084fc' }
-                    },
-                    x: {
-                        grid: { color: 'rgba(249, 115, 22, 0.2)' },
-                        ticks: { color: '#a09090' }
-                    }
+                {
+                    label: 'Avg Spells Cast',
+                    data: avgSpellsCastData,
+                    borderColor: '#c084fc',
+                    backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4),
+                    pointBackgroundColor: cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc'),
+                    yAxisID: 'ySpells'
+                }
+            ]
+        },
+        options: {
+            scales: {
+                yMana: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Mana Value', color: '#f97316' },
+                    grid: { color: 'rgba(249, 115, 22, 0.2)' },
+                    ticks: { color: '#f97316' }
+                },
+                ySpells: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    max: 3,
+                    title: { display: true, text: 'Spells Cast', color: '#c084fc' },
+                    grid: { display: false },
+                    ticks: { color: '#c084fc' }
+                },
+                x: {
+                    grid: { color: 'rgba(249, 115, 22, 0.2)' },
+                    ticks: { color: '#a09090' }
                 }
             }
-        });
-    } else {
-        // Subsequent times: update data without recreating
-        chart.data.labels = cmcValues.map(cmc => `${cmc} CMC`);
-        chart.data.datasets[0].data = freeManaData;
-        chart.data.datasets[0].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
-        chart.data.datasets[0].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#f97316');
-        chart.data.datasets[1].data = avgSpellCMCData;
-        chart.data.datasets[1].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
-        chart.data.datasets[1].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#22c55e');
-        chart.data.datasets[2].data = avgSpellsCastData;
-        chart.data.datasets[2].pointRadius = cmcValues.map(cmc => cmc === config.creatureCMC ? 8 : 4);
-        chart.data.datasets[2].pointBackgroundColor = cmcValues.map(cmc => cmc === config.creatureCMC ? '#fff' : '#c084fc');
-        chart.update();
-    }
+        }
+    });
 }
 
 /**
@@ -538,34 +527,25 @@ function updateChart(config, results) {
  */
 function updateTable(config, results) {
     const cmcValues = CONFIG.CMC_RANGE;
-    const currentResult = results[config.creatureCMC];
+    const headers = ['Creature CMC', 'Castable Cards', 'Avg Spell CMC', 'Avg Free Mana'];
 
-    let tableHTML = `
-        <tr>
-            <th>Creature CMC</th>
-            <th>Castable Cards</th>
-            <th>Avg Spell CMC</th>
-            <th>Avg Free Mana</th>
-        </tr>
-    `;
-
+    const rows = [];
     cmcValues.forEach((cmc) => {
         const r = results[cmc];
         if (!r) return;
 
-        const rowClass = cmc === config.creatureCMC ? 'current' : '';
-
-        tableHTML += `
-            <tr class="${rowClass}">
-                <td>${cmc}</td>
-                <td>${r.castableCards}</td>
-                <td>${formatNumber(r.avgSpellCMC, 2)}</td>
-                <td>${formatNumber(r.avgFreeMana, 2)}</td>
-            </tr>
-        `;
+        rows.push({
+            cells: [
+                cmc,
+                r.castableCards,
+                formatNumber(r.avgSpellCMC, 2),
+                formatNumber(r.avgFreeMana, 2)
+            ],
+            class: cmc === config.creatureCMC ? 'current' : ''
+        });
     });
 
-    document.getElementById('vortex-comparisonTable').innerHTML = tableHTML;
+    renderMultiColumnTable('vortex-comparisonTable', headers, rows);
 }
 
 /**
@@ -746,20 +726,18 @@ export function updateUI() {
  * Initialize Vortex calculator
  */
 export function init() {
+    const debouncedUpdate = debounce(() => updateUI(), 150);
+
     // Bind creature CMC slider
-    const cmcSlider = document.getElementById('vortex-cmcSlider');
-    const cmcValue = document.getElementById('vortex-cmcValue');
+    bindInputSync('vortex-cmcSlider', 'vortex-cmcValue', (val) => {
+        debouncedUpdate();
+    });
 
-    if (cmcSlider && cmcValue) {
-        cmcSlider.addEventListener('input', (e) => {
-            cmcValue.value = e.target.value;
-            updateUI();
-        });
-
-        cmcValue.addEventListener('input', (e) => {
-            const value = parseInt(e.target.value) || 3;
-            cmcSlider.value = Math.max(3, Math.min(value, 10));
-            updateUI();
+    // Bind star power checkbox
+    const starPowerCheckbox = document.getElementById('vortex-star-power');
+    if (starPowerCheckbox) {
+        starPowerCheckbox.addEventListener('change', () => {
+            debouncedUpdate();
         });
     }
 
@@ -773,7 +751,7 @@ export function init() {
 
     // Listen for deck configuration changes
     DeckConfig.onDeckUpdate(() => {
-        updateUI();
+        debouncedUpdate();
     });
 
     updateUI();
