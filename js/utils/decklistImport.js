@@ -572,3 +572,304 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
         }
     };
 }
+
+// ==================== WEB IMPORT (Moxfield & Archidekt) ====================
+
+const CORS_PROXIES = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
+/**
+ * Identify URL type and extract ID
+ * @param {string} input - URL or ID
+ * @returns {Object} - { type: 'moxfield'|'archidekt'|null, id: string }
+ */
+function parseImportInput(input) {
+    const trimmed = input.trim();
+
+    // Moxfield Patterns
+    const moxfieldPatterns = [
+        /moxfield\.com\/decks\/([a-zA-Z0-9_-]+)/,
+        /^([a-zA-Z0-9_-]{10,})$/ // Assume generic long ID is Moxfield for now, or check length
+    ];
+
+    for (const pattern of moxfieldPatterns) {
+        const match = trimmed.match(pattern);
+        if (match) return { type: 'moxfield', id: match[1] };
+    }
+
+    // Archidekt Patterns
+    // https://archidekt.com/decks/123456/name
+    // https://archidekt.com/decks/123456
+    const archidektPatterns = [
+        /archidekt\.com\/decks\/(\d+)/
+    ];
+
+    for (const pattern of archidektPatterns) {
+        const match = trimmed.match(pattern);
+        if (match) return { type: 'archidekt', id: match[1] };
+    }
+
+    return { type: null, id: null };
+}
+
+/**
+ * Fetch URL using CORS proxies with fallback
+ */
+async function fetchWithProxy(url, proxyIndex = 0) {
+    if (proxyIndex >= CORS_PROXIES.length) {
+        throw new Error('All CORS proxies failed. Please try again later or check your connection.');
+    }
+
+    const proxyBase = CORS_PROXIES[proxyIndex];
+    const proxyUrl = proxyBase + encodeURIComponent(url);
+
+    try {
+        const response = await fetch(proxyUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.warn(`Proxy ${proxyIndex} (${proxyBase}) failed:`, error);
+        return fetchWithProxy(url, proxyIndex + 1);
+    }
+}
+
+/**
+ * Process a generic card entry (from API) into our deck format
+ */
+function processCardEntry(cardData, count, typeCounts, cardDetails, cardsByName) {
+    // Robustly get type_line, checking for snake_case, camelCase, and DFCs
+    let typeLine = cardData.type_line || cardData.typeLine;
+    let cmc = cardData.cmc;
+    let power = cardData.power;
+    const name = cardData.name;
+
+    // DFC handling
+    if (cardData.card_faces && cardData.card_faces.length > 0) {
+        const face = cardData.card_faces[0];
+        typeLine = face.type_line || face.typeLine || typeLine;
+        cmc = face.cmc !== undefined ? face.cmc : cmc;
+        power = face.power;
+    }
+    
+    // Fallback: Construct type_line from component arrays (Archidekt style)
+    if (!typeLine && (cardData.types || cardData.superTypes)) {
+        const supers = cardData.superTypes || [];
+        const types = cardData.types || [];
+        const subs = cardData.subTypes || [];
+        
+        const main = [...supers, ...types].join(' ');
+        const sub = subs.join(' ');
+        
+        if (main) {
+            typeLine = sub ? `${main} — ${sub}` : main;
+        }
+    }
+
+    if (!typeLine) {
+        // Return false to indicate failure -> trigger Scryfall fetch
+        return false;
+    }
+
+    const safeTypeLine = typeLine || '';
+    const allCategories = getAllCardTypes(safeTypeLine);
+    const primaryCategory = allCategories[0];
+
+    // Add counts
+    allCategories.forEach(cat => {
+        typeCounts[cat] = (typeCounts[cat] || 0) + count;
+    });
+
+    // Store data
+    cardsByName[name] = {
+        name: name,
+        type_line: safeTypeLine,
+        cmc: cmc,
+        mana_cost: cardData.mana_cost,
+        power: power,
+        category: primaryCategory,
+        allCategories: allCategories,
+        count: count
+    };
+
+    // Detailed info for non-lands
+    if (primaryCategory !== 'lands' && cmc !== undefined) {
+        let powerNum = null;
+        if (allCategories.includes('creatures') && power !== undefined && power !== null) {
+            if (power !== '*' && power !== '1+*' && !isNaN(parseInt(power))) {
+                powerNum = parseInt(power);
+            }
+        }
+
+        for (let i = 0; i < count; i++) {
+            cardDetails.push({
+                name: name,
+                cmc: Math.floor(cmc),
+                type: primaryCategory,
+                allTypes: allCategories,
+                power: powerNum,
+                isPower5Plus: powerNum !== null && powerNum >= 5
+            });
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Import from Moxfield
+ */
+async function importFromMoxfieldInternal(deckId, progressCallback) {
+    if (progressCallback) progressCallback({ processed: 10, total: 100, percentage: 10, currentCard: 'Fetching from Moxfield...' });
+
+    const apiUrl = `https://api2.moxfield.com/v3/decks/all/${deckId}`;
+    const data = await fetchWithProxy(apiUrl);
+
+    if (progressCallback) progressCallback({ processed: 50, total: 100, percentage: 50, currentCard: 'Processing card data...' });
+
+    const typeCounts = { creatures: 0, instants: 0, sorceries: 0, artifacts: 0, enchantments: 0, planeswalkers: 0, lands: 0, battles: 0 };
+    const cardDetails = [];
+    const cardsByName = {};
+    const cardsToFetch = [];
+    let actualCardCount = 0;
+
+    // Process mainboard
+    if (data.boards?.mainboard?.cards) {
+        Object.values(data.boards.mainboard.cards).forEach(entry => {
+            if (entry.card) {
+                const count = entry.quantity || 1;
+                actualCardCount += count;
+                const success = processCardEntry(entry.card, count, typeCounts, cardDetails, cardsByName);
+                if (!success) {
+                    cardsToFetch.push({ name: entry.card.name, count });
+                }
+            }
+        });
+    }
+    
+    // Retry failed cards via Scryfall
+    if (cardsToFetch.length > 0) {
+        console.log(`Fetching ${cardsToFetch.length} incomplete cards from Scryfall...`);
+        const names = cardsToFetch.map(c => c.name);
+        const fetchedCards = await batchFetchCards(names);
+        
+        // Map fetched cards back to counts (since batchFetch returns unique cards)
+        fetchedCards.forEach(cardData => {
+            // Find count(s) for this card
+            const entries = cardsToFetch.filter(c => c.name === cardData.name); // Simple match
+            entries.forEach(entry => {
+                processCardEntry(cardData, entry.count, typeCounts, cardDetails, cardsByName);
+            });
+        });
+    }
+
+    return { typeCounts, actualCardCount, cardDetails, cardsByName, deckName: data.name };
+}
+
+/**
+ * Import from Archidekt
+ */
+async function importFromArchidektInternal(deckId, progressCallback) {
+    if (progressCallback) progressCallback({ processed: 10, total: 100, percentage: 10, currentCard: 'Fetching from Archidekt...' });
+
+    const apiUrl = `https://archidekt.com/api/decks/${deckId}/`;
+    const data = await fetchWithProxy(apiUrl);
+
+    if (progressCallback) progressCallback({ processed: 50, total: 100, percentage: 50, currentCard: 'Processing card data...' });
+
+    const typeCounts = { creatures: 0, instants: 0, sorceries: 0, artifacts: 0, enchantments: 0, planeswalkers: 0, lands: 0, battles: 0 };
+    const cardDetails = [];
+    const cardsByName = {};
+    const cardsToFetch = [];
+    let actualCardCount = 0;
+
+    if (data.cards) {
+        data.cards.forEach(entry => {
+            const categories = entry.categories || [];
+            if (categories.includes('Sideboard') || categories.includes('Maybeboard') || categories.includes('Commander')) {
+                return;
+            }
+
+            const cardData = entry.card ? (entry.card.oracleCard || entry.card) : null;
+            if (cardData) {
+                const count = entry.quantity || 1;
+                actualCardCount += count;
+                const success = processCardEntry(cardData, count, typeCounts, cardDetails, cardsByName);
+                if (!success) {
+                    cardsToFetch.push({ name: cardData.name, count });
+                }
+            }
+        });
+    }
+    
+    // Retry failed cards via Scryfall
+    if (cardsToFetch.length > 0) {
+        if (progressCallback) progressCallback({ processed: 70, total: 100, percentage: 70, currentCard: `Fetching ${cardsToFetch.length} missing cards from Scryfall...` });
+        
+        // Batch fetch in chunks if needed (batchFetch handles some, but let's just pass all)
+        // Note: batchFetchCards takes array of strings (names)
+        const uniqueNames = [...new Set(cardsToFetch.map(c => c.name))];
+        const fetchedCards = await batchFetchCards(uniqueNames);
+        
+        // Process fetched cards
+        fetchedCards.forEach(cardData => {
+            // Find all entries matching this card name
+            const matchingEntries = cardsToFetch.filter(c => c.name === cardData.name); // Exact match logic from batchFetch
+            matchingEntries.forEach(entry => {
+                processCardEntry(cardData, entry.count, typeCounts, cardDetails, cardsByName);
+            });
+        });
+    }
+
+    return { typeCounts, actualCardCount, cardDetails, cardsByName, deckName: data.name };
+}
+
+/**
+ * Main Import Function (Dispatcher)
+ * @param {string} input - URL or ID
+ * @param {Function} progressCallback - Callback
+ */
+export async function importDeckFromUrl(input, progressCallback = null) {
+    if (progressCallback) progressCallback({ processed: 0, total: 100, percentage: 0, currentCard: 'Initializing...' });
+
+    const { type, id } = parseImportInput(input);
+
+    if (!type) {
+        throw new Error('Invalid URL or ID. Supports Moxfield and Archidekt.');
+    }
+
+    let result;
+    if (type === 'moxfield') {
+        result = await importFromMoxfieldInternal(id, progressCallback);
+    } else if (type === 'archidekt') {
+        result = await importFromArchidektInternal(id, progressCallback);
+    }
+
+    if (progressCallback) progressCallback({ processed: 100, total: 100, percentage: 100, currentCard: 'Done!' });
+
+    const creaturesPower5Plus = result.cardDetails.filter(c => c.isPower5Plus).length;
+
+    return {
+        ...result.typeCounts,
+        actualCardCount: result.actualCardCount,
+        cardDetails: result.cardDetails,
+        cardsByName: result.cardsByName,
+        creaturesPower5Plus,
+        importMetadata: {
+            hasSideboard: false, 
+            sideboardCount: 0,
+            missingCardCount: 0,
+            totalCardsAttempted: result.actualCardCount,
+            totalCardsImported: result.actualCardCount,
+            source: type.charAt(0).toUpperCase() + type.slice(1),
+            deckName: result.deckName
+        }
+    };
+}
+
+// Legacy export alias for backward compatibility (if needed)
+export const importFromMoxfield = importDeckFromUrl;

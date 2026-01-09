@@ -420,7 +420,7 @@ function updateStats(config, results) {
  */
 function extractCardTypes(card) {
     const types = [];
-    const lower = card.type_line.toLowerCase();
+    const lower = (card.type_line || '').toLowerCase();
 
     if (lower.includes('creature')) types.push('creature');
     if (lower.includes('artifact')) types.push('artifact');

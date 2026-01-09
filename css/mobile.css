@@ -194,6 +194,21 @@
         background: var(--panel-bg);
         z-index: 1;
     }
+    
+    /* URL Import Row Stacking */
+    .import-url-row {
+        flex-direction: column;
+    }
+    
+    .import-url-row input,
+    .import-url-row .import-btn {
+        width: 100%;
+        margin-right: 0;
+    }
+    
+    .import-url-row .import-btn {
+        margin-top: 8px;
+    }
 }
 
 /* Small mobile */

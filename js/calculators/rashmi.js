@@ -5,6 +5,10 @@
 
 import { createCache, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
+import {
+    buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
+    createCollapsibleSection
+} from '../utils/sampleSimulator.js';
 
 const CONFIG = {
     CMC_RANGE_BEFORE: 2,
@@ -26,6 +30,128 @@ function isXSpell(manaCost) {
     if (!manaCost) return false;
     // Check if mana cost contains {X}
     return /\{X\}/i.test(manaCost);
+}
+
+/**
+ * Run sample Rashmi reveals
+ */
+export function runSampleReveals() {
+    const config = getDeckConfig();
+    const cardData = { cardsByName: DeckConfig.getImportedCardData().cardsByName };
+
+    if (!config.hasImportedData) {
+        document.getElementById('rashmi-reveals-display').innerHTML = '<p style="color: var(--text-dim);">Import a decklist to see sample reveals</p>';
+        return;
+    }
+
+    // Get number of simulations
+    const countInput = document.getElementById('rashmi-sample-count');
+    const numSims = Math.max(1, parseInt(countInput?.value) || 10);
+
+    // Build deck
+    const deck = buildDeckFromCardData(cardData);
+    
+    // Note: Rashmi triggers on the first spell you cast each turn.
+    // The reveal comes from the top of the library.
+    // We assume the deck is the library (minus the card being cast, technically, but for large N simulation we can just shuffle the whole deck).
+    // If we want to be precise, we should remove one instance of a card with `config.castCmc` from the deck, but we don't know WHICH card was cast.
+    // For now, shuffling the full deck is a sufficient approximation.
+
+    let revealsHTML = '';
+    let hitCount = 0;
+    let totalFreeCMC = 0;
+    const hitDistribution = new Array(2).fill(0); // 0 = Whiff, 1 = Hit
+
+    for (let i = 0; i < numSims; i++) {
+        const shuffled = shuffleDeck([...deck]);
+        const revealedCard = shuffled[0]; // Top card
+
+        // Determine if it's a hit
+        const cardCmc = revealedCard.cmc || 0;
+        const isX = isXSpell(revealedCard.mana_cost);
+        // Rashmi specifies "nonland card", so lands are always a whiff (draw only)
+        const isLand = revealedCard.types.includes('land');
+        
+        let isFree = false;
+        let isXHit = false;
+
+        // Check Rashmi conditions: Nonland AND CMC < Cast CMC
+        if (!isLand && cardCmc < config.castCmc) {
+            if (isX) {
+                if (!config.excludeXSpells) {
+                    isFree = true;
+                    isXHit = true; // Mark as X spell hit (X=0)
+                }
+            } else {
+                isFree = true;
+            }
+        }
+
+        if (isFree) {
+            hitCount++;
+            hitDistribution[1]++;
+            totalFreeCMC += cardCmc;
+        } else {
+            hitDistribution[0]++;
+        }
+
+        // HTML
+        revealsHTML += `<div class="sample-reveal ${isFree ? 'free-spell' : 'whiff'}">`;
+        revealsHTML += `<div><strong>Reveal ${i + 1}:</strong></div>`;
+        revealsHTML += '<div style="margin: 8px 0;">';
+        revealsHTML += renderCardBadge(revealedCard);
+        
+        if (isFree) {
+            const extraInfo = isXHit ? ' (X=0)' : '';
+            revealsHTML += `<span style="margin-left: 8px; color: #22c55e; font-weight: bold;">CAST FREE!${extraInfo}</span>`;
+        } else {
+            let reason = '';
+            if (isLand) {
+                reason = '(Land)';
+            } else if (cardCmc >= config.castCmc) {
+                reason = `(CMC ${cardCmc} too high)`;
+            } else if (isX && config.excludeXSpells) {
+                reason = `(X Spell excluded)`;
+            }
+            revealsHTML += `<span style="margin-left: 8px; color: #ef4444;">Draw card ${reason}</span>`;
+        }
+        
+        revealsHTML += '</div></div>';
+    }
+
+    // Chart
+    let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
+    distributionHTML += '<h4 style="margin-top: 0;">Hit Rate:</h4>';
+    
+    // Custom mini-chart for Hit/Miss since it's binary
+    const hitPct = (hitCount / numSims * 100).toFixed(1);
+    const missPct = (100 - parseFloat(hitPct)).toFixed(1);
+    
+    distributionHTML += `<div style="display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin: 12px 0;">
+        <div style="width: ${hitPct}%; background: #22c55e;" title="Free Spell (${hitPct}%)"></div>
+        <div style="width: ${missPct}%; background: #ef4444;" title="Draw Only (${missPct}%)"></div>
+    </div>`;
+    
+    distributionHTML += `<div style="display: flex; justify-content: space-between; font-size: 0.9em;">
+        <span style="color: #22c55e;">Free Spell: ${hitPct}%</span>
+        <span style="color: #ef4444;">Draw Only: ${missPct}%</span>
+    </div>`;
+
+    if (hitCount > 0) {
+        distributionHTML += `<div style="margin-top: 8px; text-align: center; font-size: 0.9em; color: var(--text-secondary);">
+            Avg Free CMC: ${(totalFreeCMC / hitCount).toFixed(2)}
+        </div>`;
+    }
+
+    distributionHTML += '</div>';
+
+    const revealsSectionHTML = createCollapsibleSection(
+        `Show/Hide Individual Reveals (${numSims} simulations)`,
+        revealsHTML,
+        true
+    );
+
+    document.getElementById('rashmi-reveals-display').innerHTML = distributionHTML + revealsSectionHTML;
 }
 
 /**
@@ -424,4 +550,53 @@ export function updateUI() {
     updateChart(config, results);
     updateTable(config, results);
     updateCMCBreakdown(config);
+
+    // Run sample reveals if container exists
+    if (document.getElementById('rashmi-reveals-display') && config.hasImportedData) {
+        runSampleReveals();
+    }
+}
+
+/**
+ * Initialize Rashmi calculator
+ */
+export function init() {
+    // Bind CMC slider and input
+    const cmcSlider = document.getElementById('rashmi-cmcSlider');
+    const cmcValue = document.getElementById('rashmi-cmcValue');
+    const excludeCheckbox = document.getElementById('rashmi-exclude-x');
+
+    if (cmcSlider && cmcValue) {
+        cmcSlider.addEventListener('input', (e) => {
+            cmcValue.value = e.target.value;
+            updateUI();
+        });
+
+        cmcValue.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value) || 1;
+            cmcSlider.value = Math.max(1, Math.min(value, 15));
+            updateUI();
+        });
+    }
+
+    if (excludeCheckbox) {
+        excludeCheckbox.addEventListener('change', () => {
+            updateUI();
+        });
+    }
+
+    // Bind sample reveal button
+    const revealBtn = document.getElementById('rashmi-draw-reveals-btn');
+    if (revealBtn) {
+        revealBtn.addEventListener('click', () => {
+            runSampleReveals();
+        });
+    }
+
+    // Listen for deck configuration changes
+    DeckConfig.onDeckUpdate(() => {
+        updateUI();
+    });
+
+    updateUI();
 }

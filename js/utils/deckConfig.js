@@ -3,7 +3,7 @@
  * Centralizes deck configuration across all calculators
  */
 
-import { importDecklistBatch } from './decklistImport.js';
+import { importDecklistBatch, importFromMoxfield } from './decklistImport.js';
 
 // Global deck state (99-card Commander deck)
 let deckState = {
@@ -186,21 +186,140 @@ export function initDeckConfig() {
         }
     });
 
-    // Bind import button
-    const importBtn = document.getElementById('import-btn');
-    const decklistInput = document.getElementById('decklist-input');
+    // Shared UI elements
     const importStatus = document.getElementById('import-status');
     const importProgress = document.getElementById('import-progress');
     const importProgressBar = document.getElementById('import-progress-bar');
+    const deckConfigPanel = document.getElementById('deck-config');
 
-    console.log('Import elements found:', { importBtn, decklistInput, importStatus, importProgress });
+    // Helper to process successful import
+    const processImportResult = (typeCounts) => {
+        // Complete the progress bar
+        if (importProgressBar) importProgressBar.style.width = '100%';
 
-    if (importBtn && decklistInput && importStatus && importProgress && importProgressBar) {
-        console.log('Binding import button click handler');
+        console.log('Type counts received:', typeCounts);
+        console.log('Card details count:', typeCounts.cardDetails?.length || 0);
+
+        // Update deck state and UI
+        updateDeck(typeCounts);
+
+        // Update input fields
+        typeFields.forEach(field => {
+            const input = document.getElementById(`deck-${field}`);
+            if (input) {
+                input.value = typeCounts[field] || 0;
+            }
+        });
+
+        updateTotalDisplay();
+
+        // Use actualCardCount for accurate deck size (accounts for dual-typed cards)
+        const totalCards = typeCounts.actualCardCount || 0;
+
+        // Build status message with warnings
+        const metadata = typeCounts.importMetadata;
+        let statusMessage = `✓ Successfully imported ${totalCards} cards`;
+        if (metadata && metadata.source) statusMessage += ` from ${metadata.source}`;
+        if (metadata && metadata.deckName) statusMessage += ` (${metadata.deckName})`;
+        statusMessage += '!';
+
+        let warnings = [];
+
+        if (metadata) {
+            if (metadata.hasSideboard) {
+                warnings.push(`Sideboard ignored (${metadata.sideboardCount} cards)`);
+            }
+            if (metadata.missingCardCount > 0) {
+                warnings.push(`${metadata.missingCardCount} cards not found`);
+            }
+        }
+
+        if (warnings.length > 0) {
+            statusMessage += `<br><small style="color: #f59e0b;">⚠ ${warnings.join(' • ')}</small>`;
+        }
+
+        // Show detailed missing cards if any
+        if (metadata && metadata.missingCards && metadata.missingCards.length > 0) {
+            const missingList = metadata.missingCards
+                .map(card => `${card.count}× ${card.name}`)
+                .join(', ');
+            console.warn('Missing cards:', missingList);
+            statusMessage += `<br><small style="color: var(--text-dim); font-size: 0.75em;">Missing: ${missingList}</small>`;
+        }
+
+        showImportStatus(statusMessage, 'success');
+
+        // Hide progress bar after a moment
+        setTimeout(() => {
+            if (importProgress) importProgress.classList.remove('visible');
+        }, 800);
+
+        // Auto-collapse the deck config panel after successful import (only if no critical issues)
+        const hasMissingCards = metadata && metadata.missingCardCount > 0;
+        if (deckConfigPanel && deckConfigPanel.classList.contains('expanded') && !hasMissingCards) {
+            setTimeout(() => {
+                deckConfigPanel.classList.remove('expanded');
+                const collapseIcon = deckConfigPanel.querySelector('.collapse-icon');
+                if (collapseIcon) {
+                    collapseIcon.textContent = '▶';
+                }
+            }, 1200); 
+        }
+    };
+
+    // --- Moxfield Import ---
+    const moxfieldBtn = document.getElementById('moxfield-import-btn');
+    const moxfieldInput = document.getElementById('moxfield-input');
+
+    if (moxfieldBtn && moxfieldInput) {
+        const runMoxfieldImport = async () => {
+            const url = moxfieldInput.value.trim();
+            if (!url) {
+                showImportStatus('Please enter a Moxfield URL or Deck ID', 'error');
+                return;
+            }
+
+            try {
+                moxfieldBtn.disabled = true;
+                if (importProgress) {
+                    importProgress.classList.add('visible');
+                    importProgressBar.style.width = '0%';
+                }
+                showImportStatus('Fetching from Moxfield...', 'loading');
+
+                const typeCounts = await importFromMoxfield(url, (progress) => {
+                    const percentage = progress.percentage || 0;
+                    if (importProgressBar) importProgressBar.style.width = `${percentage}%`;
+                    showImportStatus(
+                        `${progress.currentCard} (${percentage}%)`,
+                        'loading'
+                    );
+                });
+
+                processImportResult(typeCounts);
+
+            } catch (error) {
+                console.error('Moxfield import error:', error);
+                showImportStatus(`Error: ${error.message}`, 'error');
+                if (importProgress) importProgress.classList.remove('visible');
+            } finally {
+                moxfieldBtn.disabled = false;
+            }
+        };
+
+        moxfieldBtn.addEventListener('click', runMoxfieldImport);
+        moxfieldInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') runMoxfieldImport();
+        });
+    }
+
+    // --- Text Import ---
+    const importBtn = document.getElementById('import-btn');
+    const decklistInput = document.getElementById('decklist-input');
+
+    if (importBtn && decklistInput) {
         importBtn.addEventListener('click', async () => {
-            console.log('Import button clicked!');
             const decklistText = decklistInput.value.trim();
-            console.log('Decklist text length:', decklistText.length);
 
             if (!decklistText) {
                 showImportStatus('Please paste a decklist first', 'error');
@@ -209,96 +328,27 @@ export function initDeckConfig() {
 
             try {
                 importBtn.disabled = true;
-                importProgress.classList.add('visible');
-                importProgressBar.style.width = '0%';
+                if (importProgress) {
+                    importProgress.classList.add('visible');
+                    importProgressBar.style.width = '0%';
+                }
                 showImportStatus('Analyzing decklist...', 'loading');
-                console.log('Starting import...');
 
                 const typeCounts = await importDecklistBatch(decklistText, (progress) => {
-                    console.log('Progress:', progress);
                     const percentage = progress.percentage || 0;
-                    importProgressBar.style.width = `${percentage}%`;
+                    if (importProgressBar) importProgressBar.style.width = `${percentage}%`;
                     showImportStatus(
                         `Processing: ${percentage}% (${progress.processed}/${progress.total} cards)`,
                         'loading'
                     );
                 });
 
-                // Complete the progress bar
-                importProgressBar.style.width = '100%';
-
-                console.log('Type counts received:', typeCounts);
-                console.log('Card details count:', typeCounts.cardDetails?.length || 0);
-
-                // Update deck state and UI
-                updateDeck(typeCounts);
-
-                // Update input fields
-                typeFields.forEach(field => {
-                    const input = document.getElementById(`deck-${field}`);
-                    if (input) {
-                        input.value = typeCounts[field] || 0;
-                    }
-                });
-
-                updateTotalDisplay();
-
-                // Use actualCardCount for accurate deck size (accounts for dual-typed cards)
-                const totalCards = typeCounts.actualCardCount || 0;
-
-                // Build status message with warnings
-                const metadata = typeCounts.importMetadata;
-                let statusMessage = `✓ Successfully imported ${totalCards} cards!`;
-                let warnings = [];
-
-                if (metadata) {
-                    if (metadata.hasSideboard) {
-                        warnings.push(`Sideboard ignored (${metadata.sideboardCount} cards)`);
-                    }
-                    if (metadata.missingCardCount > 0) {
-                        warnings.push(`${metadata.missingCardCount} cards not found`);
-                    }
-                }
-
-                if (warnings.length > 0) {
-                    statusMessage += `<br><small style="color: #f59e0b;">⚠ ${warnings.join(' • ')}</small>`;
-                }
-
-                // Show detailed missing cards if any
-                if (metadata && metadata.missingCards && metadata.missingCards.length > 0) {
-                    const missingList = metadata.missingCards
-                        .map(card => `${card.count}× ${card.name}`)
-                        .join(', ');
-                    console.warn('Missing cards:', missingList);
-                    statusMessage += `<br><small style="color: var(--text-dim); font-size: 0.75em;">Missing: ${missingList}</small>`;
-                }
-
-                showImportStatus(statusMessage, 'success');
-
-                // Hide progress bar after a moment
-                setTimeout(() => {
-                    importProgress.classList.remove('visible');
-                }, 800);
-
-                // Auto-collapse the deck config panel after successful import (only if missing cards)
-                const deckConfigPanel = document.getElementById('deck-config');
-                const hasMissingCards = metadata && metadata.missingCardCount > 0;
-                if (deckConfigPanel && deckConfigPanel.classList.contains('expanded') && !hasMissingCards) {
-                    setTimeout(() => {
-                        deckConfigPanel.classList.remove('expanded');
-                        const collapseIcon = deckConfigPanel.querySelector('.collapse-icon');
-                        if (collapseIcon) {
-                            collapseIcon.textContent = '▶';
-                        }
-                    }, 1200); // Wait a bit so user sees success message
-                }
-
-                // DON'T clear the textarea - keep it so user can modify and re-import
+                processImportResult(typeCounts);
 
             } catch (error) {
                 console.error('Import error:', error);
                 showImportStatus(`Error: ${error.message}`, 'error');
-                importProgress.classList.remove('visible');
+                if (importProgress) importProgress.classList.remove('visible');
             } finally {
                 importBtn.disabled = false;
             }

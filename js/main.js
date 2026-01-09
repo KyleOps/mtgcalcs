@@ -265,6 +265,14 @@ function initRashmiInputs() {
         });
     }
 
+    // Sample reveals button
+    const rashmiDrawRevealsBtn = document.getElementById('rashmi-draw-reveals-btn');
+    if (rashmiDrawRevealsBtn) {
+        rashmiDrawRevealsBtn.addEventListener('click', () => {
+            Rashmi.runSampleReveals();
+        });
+    }
+
     // Listen for deck config changes
     DeckConfig.onDeckUpdate(() => debouncedUpdate());
 }

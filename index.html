@@ -35,6 +35,18 @@
 
             <div class="panel-content">
                 <div class="input-group import-section">
+                    <label for="moxfield-input">Import from Moxfield or Archidekt (URL or ID)</label>
+                    <div class="import-url-row" style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="moxfield-input" placeholder="https://moxfield.com/decks/..." style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+                        <button id="moxfield-import-btn" class="import-btn" aria-label="Import from Archidekt or  Moxfield">
+                            ☁️ Import
+                        </button>
+                    </div>
+                    <div style="text-align: center; margin-bottom: 12px; color: var(--text-dim); font-size: 0.9em; position: relative;">
+                        <span style="background: var(--panel-bg); padding: 0 10px; position: relative; z-index: 1;">OR PASTE TEXT</span>
+                        <div style="position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--border-color); z-index: 0;"></div>
+                    </div>
+
                     <label for="decklist-input">Import Decklist (paste text)</label>
                     <textarea
                         id="decklist-input"
@@ -348,6 +360,20 @@
                     <div id="vortex-stats"></div>
                 </section>
 
+                <section class="panel" id="vortex-sample-reveals" aria-label="Sample reveals">
+                    <h2>🎴 Sample Discover Reveals</h2>
+                    <div style="display: flex; gap: var(--spacing-md); align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                        <label for="vortex-sample-count" style="color: var(--text-secondary);">Simulations:</label>
+                        <input type="number" id="vortex-sample-count" min="1" max="10000" value="10"
+                               style="width: 100px; padding: 8px; background: var(--panel-bg-alt); border: 1px solid var(--accent); border-radius: var(--radius-md); color: var(--text-light); text-align: center;">
+                        <button id="vortex-draw-reveals-btn" class="import-btn">Run Simulations</button>
+                        <span style="color: var(--text-dim); font-size: 0.85em;">(1-10000)</span>
+                    </div>
+                    <div id="vortex-reveals-display">
+                        <!-- Sample reveals will be displayed here -->
+                    </div>
+                </section>
+
                 <section class="panel" aria-label="Creature comparison">
                     <h2>🔍 CMC Comparison</h2>
                     <div class="table-wrapper">
@@ -442,6 +468,20 @@
                 </section>
 
                 <section class="panel" id="rashmi-breakdown" aria-label="CMC distribution">
+                </section>
+
+                <section class="panel" id="rashmi-sample-reveals" aria-label="Sample reveals">
+                    <h2>🎴 Sample Cast Triggers</h2>
+                    <div style="display: flex; gap: var(--spacing-md); align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                        <label for="rashmi-sample-count" style="color: var(--text-secondary);">Simulations:</label>
+                        <input type="number" id="rashmi-sample-count" min="1" max="10000" value="10"
+                               style="width: 100px; padding: 8px; background: var(--panel-bg-alt); border: 1px solid var(--accent); border-radius: var(--radius-md); color: var(--text-light); text-align: center;">
+                        <button id="rashmi-draw-reveals-btn" class="import-btn">Run Simulations</button>
+                        <span style="color: var(--text-dim); font-size: 0.85em;">(1-10000)</span>
+                    </div>
+                    <div id="rashmi-reveals-display">
+                        <!-- Sample reveals will be displayed here -->
+                    </div>
                 </section>
 
 

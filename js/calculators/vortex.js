@@ -8,6 +8,10 @@
 
 import { createCache, formatNumber, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
+import {
+    buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
+    createCollapsibleSection
+} from '../utils/sampleSimulator.js';
 
 const CONFIG = {
     ITERATIONS: 20000,
@@ -17,6 +21,174 @@ const CONFIG = {
 let simulationCache = createCache(50);
 let lastDeckHash = '';
 let chart = null;
+
+/**
+ * Run sample Discover reveals
+ */
+export function runSampleReveals() {
+    const config = getDeckConfig();
+    const cardData = { cardsByName: DeckConfig.getImportedCardData().cardsByName };
+
+    if (!config.cardDetails || config.cardDetails.length === 0) {
+        document.getElementById('vortex-reveals-display').innerHTML = '<p style="color: var(--text-dim);">Import a decklist to see sample reveals</p>';
+        return;
+    }
+
+    // Get number of simulations
+    const countInput = document.getElementById('vortex-sample-count');
+    const numSims = Math.max(1, parseInt(countInput?.value) || 10);
+
+    // Build deck
+    const deck = buildDeckFromCardData(cardData);
+    
+    // Identify the card we are casting (to exclude it from deck if unique)
+    // For simplicity in the visualizer, we'll just shuffle the whole deck and assume we have an infinite copy of the commander/creature in the command zone/hand
+    // But strictly speaking, if we cast a unique card from hand, it's not in the library.
+    // The current `simulateDiscoverForCMC` logic handles this by filtering `cardDetails`.
+    // Here, let's just use the full deck for the "library" state, assuming the cast spell is already on the stack.
+
+    let revealsHTML = '';
+    let totalFreeMana = 0;
+    let totalSpells = 0;
+    const spellsCastDist = new Array(10).fill(0); // Track chains 0-9+
+
+    for (let i = 0; i < numSims; i++) {
+        const shuffled = shuffleDeck([...deck]);
+        let currentDiscoverCMC = config.creatureCMC;
+        let deckIndex = 0;
+        let chainCount = 0;
+        let chainMana = 0;
+        let revealStepsHTML = '';
+        let openDivs = 0;
+        
+        // Chain loop
+        while (chainCount < 10 && deckIndex < shuffled.length) {
+            // Reveal cards until hit
+            const revealedCards = [];
+            let hitCard = null;
+
+            for (; deckIndex < shuffled.length; deckIndex++) {
+                const card = shuffled[deckIndex];
+                
+                // Determine if land (CMC 0 and type land)
+                // Note: buildDeckFromCardData sets CMC 0 for lands. 
+                // We need to be careful about CMC 0 artifacts (Crypt) vs Lands.
+                // card.types array helps.
+                const isLand = card.types.includes('land');
+                
+                if (isLand) {
+                    revealedCards.push({ ...card, status: 'skipped' }); // Lands skipped by discover
+                    continue;
+                }
+
+                // Non-land. Check CMC.
+                if (card.cmc <= currentDiscoverCMC) {
+                    hitCard = card;
+                    deckIndex++; // Consume this card
+                    break;
+                } else {
+                    revealedCards.push({ ...card, status: 'skipped' }); // Too high CMC
+                }
+            }
+
+            // Render this step
+            revealStepsHTML += `<div style="margin-top: 8px; border-left: 2px solid var(--accent); padding-left: 8px;">`;
+            openDivs++;
+
+            revealStepsHTML += `<div style="font-size: 0.85em; color: var(--text-dim); margin-bottom: 4px;">Discover ${currentDiscoverCMC}:</div>`;
+            revealStepsHTML += `<div>`;
+            
+            // Show skipped cards (limit to first few and last few if too many?)
+            revealedCards.forEach(c => {
+                 revealStepsHTML += `<span class="reveal-card dimmed" style="opacity: 0.5; transform: scale(0.9);" title="${c.name} (Skipped)">${c.name}</span>`;
+            });
+
+            if (hitCard) {
+                // Determine if it chains
+                // We need to know if it's a creature with power 5+
+                // The card object from `buildDeckFromCardData` has `power`.
+                // Check if power >= 5.
+                let powerNum = -1;
+                if (hitCard.power !== undefined && hitCard.power !== '*' && !isNaN(parseInt(hitCard.power))) {
+                    powerNum = parseInt(hitCard.power);
+                }
+                
+                const isCreature = hitCard.types.includes('creature');
+                let isPower5Plus = false;
+                if (isCreature && hitCard.power) {
+                     const p = parseInt(hitCard.power);
+                     if (!isNaN(p) && p >= 5) isPower5Plus = true;
+                }
+
+                const chainClass = isPower5Plus ? 'chain-trigger' : '';
+                const chainIcon = isPower5Plus ? ' ⚡' : '';
+                
+                revealStepsHTML += renderCardBadge(hitCard);
+                revealStepsHTML += `<span style="margin-left: 8px; color: ${isPower5Plus ? '#c084fc' : '#22c55e'}; font-weight: bold;">
+                    ${isPower5Plus ? 'CAST & CHAIN!' : 'CAST'}
+                </span>`;
+
+                chainCount++;
+                chainMana += hitCard.cmc;
+                
+                revealStepsHTML += `</div>`; // Close content div
+
+                if (isPower5Plus) {
+                    currentDiscoverCMC = hitCard.cmc;
+                    // Prepare for next nested step
+                    revealStepsHTML += `<div style="margin-left: 16px; border-left: 1px dashed rgba(255,255,255,0.1);">`;
+                    openDivs++;
+                } else {
+                    break; // End of chain
+                }
+
+            } else {
+                revealStepsHTML += `<span style="color: #ef4444;">Exiled rest of deck (Whiff)</span>`;
+                revealStepsHTML += `</div>`; // Close content div
+                break;
+            }
+        }
+
+        // Close all open divs
+        for (let k = 0; k < openDivs; k++) {
+            revealStepsHTML += `</div>`;
+        }
+
+        totalSpells += chainCount;
+        totalFreeMana += chainMana;
+        spellsCastDist[Math.min(chainCount, 9)]++;
+
+        // Reveal container
+        const isWhiff = chainCount === 0;
+        revealsHTML += `<div class="sample-reveal ${!isWhiff ? 'free-spell' : 'whiff'}" style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-color, #333); border-radius: 8px;">`;
+        revealsHTML += `<div><strong>Reveal ${i + 1}:</strong> ${chainCount} spell${chainCount !== 1 ? 's' : ''} (${chainMana} mana)</div>`;
+        revealsHTML += revealStepsHTML;
+        revealsHTML += `</div>`;
+    }
+
+    // Distribution Chart
+    let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
+    distributionHTML += '<h4 style="margin-top: 0;">Spells Cast Distribution:</h4>';
+    
+    distributionHTML += renderDistributionChart(
+        spellsCastDist,
+        numSims,
+        (count) => `${count} ${count === 1 ? 'spell ' : 'spells'}`,
+        (count) => count >= 2 ? ' ⚡ CHAIN' : ''
+    );
+
+    distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
+    distributionHTML += `<strong>Average:</strong> ${(totalSpells / numSims).toFixed(2)} spells, ${(totalFreeMana / numSims).toFixed(1)} mana per trigger`;
+    distributionHTML += '</div></div>';
+
+    const revealsSectionHTML = createCollapsibleSection(
+        `Show/Hide Individual Reveals (${numSims} simulations)`,
+        revealsHTML,
+        true
+    );
+
+    document.getElementById('vortex-reveals-display').innerHTML = distributionHTML + revealsSectionHTML;
+}
 
 /**
  * Simulate a full discover chain using actual card data
@@ -168,6 +340,7 @@ function simulateDiscoverForCMC(cardDetails, creatureCMC, lands, castCreature = 
         avgFreeMana: avgFreeMana,
         avgSpellsPerTrigger: avgSpellsPerTrigger,
         multiDiscoverRate: multiDiscoverCount / CONFIG.ITERATIONS,
+        successfulDiscoveries: successfulDiscoveries, // Export for hit rate calc
         castableCards: castableCards,
         power5PlusInRange: power5PlusInRange,
         discoverableCards: discoverableCards // Include the actual card list
@@ -405,6 +578,7 @@ function updateStats(config, results) {
     if (statsPanel && currentResult) {
         const totalNonLands = config.cardDetails.length;
         const castablePercent = totalNonLands > 0 ? (currentResult.castableCards / totalNonLands) * 100 : 0;
+        const hitRate = currentResult.successfulDiscoveries / CONFIG.ITERATIONS;
 
         // Build detailed breakdown with actual card names
         const discoverableCards = currentResult.discoverableCards || [];
@@ -473,33 +647,43 @@ function updateStats(config, results) {
         statsPanel.innerHTML = `
             <h3>🌀 Discover ${config.creatureCMC} Analysis</h3>
             ${excludedCreatureNote}
-            <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Discover Pool</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: var(--text-light);">${currentResult.castableCards}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">${formatNumber(castablePercent, 0)}% of non-lands</div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+                 <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px; text-align: center;">
+                    <div style="color: var(--text-dim); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px;">Avg Spells</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: var(--text-light); line-height: 1.2;">${formatNumber(currentResult.avgSpellsPerTrigger, 2)}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.8em;">per trigger</div>
                 </div>
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Chain-Capable</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: #c084fc;">${power5PlusInRange}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">${formatNumber(chainablePercent, 1)}% of pool</div>
+                 <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px; text-align: center;">
+                    <div style="color: var(--text-dim); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px;">Avg Mana</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: #f97316; line-height: 1.2;">${formatNumber(currentResult.avgFreeMana, 1)}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.8em;">value per trigger</div>
                 </div>
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Avg Free Mana</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: #f97316;">${formatNumber(currentResult.avgFreeMana, 1)}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">per trigger</div>
+                 <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(34, 197, 94, 0.2);">
+                    <div style="color: var(--text-dim); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px;">Chain Probability</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: #22c55e; line-height: 1.2;">${formatNumber(currentResult.multiDiscoverRate * 100, 1)}%</div>
+                    <div style="color: var(--text-secondary); font-size: 0.8em;">chance of >1 spell</div>
                 </div>
-                <div class="stat-card" style="background: var(--panel-bg-alt); padding: 12px; border-radius: 8px;">
-                    <div style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 4px;">Chain Rate</div>
-                    <div style="font-size: 1.5em; font-weight: bold; color: #22c55e;">${formatNumber(currentResult.multiDiscoverRate * 100, 1)}%</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85em;">2+ spells</div>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                     <span style="color: var(--text-dim);">Discover Pool Size</span>
+                     <strong>${currentResult.castableCards} cards <span style="font-weight: normal; color: var(--text-secondary); font-size: 0.9em;">(${formatNumber(castablePercent, 0)}% of non-lands)</span></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;" title="Percentage of discoverable cards that will trigger another discover">
+                     <span style="color: var(--text-dim);">Chain Density (Pool)</span>
+                     <strong style="color: #c084fc;">${formatNumber(chainablePercent, 1)}% <span style="font-weight: normal; color: var(--text-secondary); font-size: 0.9em;">(${power5PlusInRange} cards)</span></strong>
+                </div>
+                 <div style="display: flex; justify-content: space-between;" title="Probability of finding ANY valid card (not whiffing)">
+                     <span style="color: var(--text-dim);">Hit Probability</span>
+                     <strong>${formatNumber(hitRate * 100, 1)}%</strong>
                 </div>
             </div>
 
             <div style="margin-top: 16px; padding: 12px; background: var(--panel-bg-alt); border-left: 3px solid var(--accent); border-radius: 4px;">
                 <div style="margin-bottom: 8px;">${interpretation}</div>
                 <div style="color: var(--text-secondary); font-size: 0.9em;">
-                    • Average ${formatNumber(currentResult.avgSpellsPerTrigger, 2)} spells cast per trigger<br>
                     • Average discovered spell costs ${formatNumber(currentResult.avgSpellCMC, 1)} mana<br>
                 </div>
             </div>
@@ -551,6 +735,11 @@ export function updateUI() {
     updateChart(config, results);
     updateTable(config, results);
     updateStats(config, results);
+
+    // Call sample reveals if container exists and we have data
+    if (document.getElementById('vortex-reveals-display') && config.cardDetails.length > 0) {
+         runSampleReveals();
+    }
 }
 
 /**
@@ -571,6 +760,14 @@ export function init() {
             const value = parseInt(e.target.value) || 3;
             cmcSlider.value = Math.max(3, Math.min(value, 10));
             updateUI();
+        });
+    }
+
+    // Bind sample reveal button
+    const revealBtn = document.getElementById('vortex-draw-reveals-btn');
+    if (revealBtn) {
+        revealBtn.addEventListener('click', () => {
+             runSampleReveals();
         });
     }
 
