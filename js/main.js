@@ -157,11 +157,25 @@ function initPortentInputs() {
         debouncedUpdate();
     });
 
-    // Sample reveals button
-    const drawRevealsBtn = document.getElementById('portent-draw-reveals-btn');
-    if (drawRevealsBtn) {
-        drawRevealsBtn.addEventListener('click', () => {
+    // Sample reveals buttons
+    const portentDrawRevealsBtn = document.getElementById('portent-draw-reveals-btn');
+    if (portentDrawRevealsBtn) {
+        portentDrawRevealsBtn.addEventListener('click', () => {
             Portent.runSampleReveals();
+        });
+    }
+
+    const surgeDrawRevealsBtn = document.getElementById('surge-draw-reveals-btn');
+    if (surgeDrawRevealsBtn) {
+        surgeDrawRevealsBtn.addEventListener('click', () => {
+            Surge.runSampleReveals();
+        });
+    }
+
+    const waveDrawRevealsBtn = document.getElementById('wave-draw-reveals-btn');
+    if (waveDrawRevealsBtn) {
+        waveDrawRevealsBtn.addEventListener('click', () => {
+            Wave.runSampleReveals();
         });
     }
 

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(npx serve -l 3000)",
+      "Bash(start index.html)",
+      "Bash(curl:*)",
+      "Bash(node -e:*)"
+    ]
+  }
+}

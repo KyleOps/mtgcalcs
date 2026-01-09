@@ -5,6 +5,10 @@
 
 import { createCache, partialShuffle, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
+import {
+    buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
+    createCollapsibleSection, extractCardTypes
+} from '../utils/sampleSimulator.js';
 
 const CONFIG = {
     ITERATIONS: 20000,
@@ -17,41 +21,54 @@ let lastDeckHash = '';
 let chart = null;
 
 /**
- * Create a simple hash for cmcCounts object (faster than JSON.stringify)
- * @param {Object} cmc - CMC counts object
+ * Create a hash for the distribution object
+ * @param {Object} dist - Distribution object (CMC -> count)
  * @returns {string} - Hash string
  */
-function hashCMC(cmc) {
-    return `${cmc.cmc0}-${cmc.cmc2}-${cmc.cmc3}-${cmc.cmc4}-${cmc.cmc5}-${cmc.cmc6}-${cmc.lands}-${cmc.nonperm}`;
+function hashDistribution(dist) {
+    return Object.entries(dist)
+        .sort((a, b) => {
+            if (a[0] === 'nonperm') return 1;
+            if (b[0] === 'nonperm') return -1;
+            return Number(a[0]) - Number(b[0]);
+        })
+        .map(([k, v]) => `${k}:${v}`)
+        .join('|');
 }
 
 /**
  * Simulate Genesis Wave
  * @param {number} deckSize - Total cards in library
- * @param {Object} cmcCounts - Card counts by CMC bracket
+ * @param {Object} distribution - Map of CMC (or 'nonperm') to count
  * @param {number} x - X value (cards to reveal)
  * @returns {Object} - Simulation results
  */
-export function simulateGenesisWave(deckSize, cmcCounts, x) {
-    const cacheKey = `${deckSize}-${x}-${hashCMC(cmcCounts)}`;
+export function simulateGenesisWave(deckSize, distribution, x) {
+    const cacheKey = `${deckSize}-${x}-${hashDistribution(distribution)}`;
     const cached = simulationCache.get(cacheKey);
     if (cached) return cached;
 
-    // Build deck: 0 = permanent, 1 = non-permanent
+    // Build deck: each card stores its CMC (0-20), or 255 for non-permanent
     const deck = new Uint8Array(deckSize);
     let idx = 0;
 
-    // All permanents (lands + all CMC permanents)
-    const totalPermanents = cmcCounts.lands + cmcCounts.cmc0 + cmcCounts.cmc2 +
-                           cmcCounts.cmc3 + cmcCounts.cmc4 + cmcCounts.cmc5 + cmcCounts.cmc6;
-
-    for (let i = 0; i < totalPermanents; i++) {
-        deck[idx++] = 0;
+    // Populate deck from distribution
+    for (const [key, count] of Object.entries(distribution)) {
+        const val = key === 'nonperm' ? 255 : parseInt(key);
+        // Safety check for valid count
+        const safeCount = Math.max(0, count || 0);
+        
+        for (let i = 0; i < safeCount; i++) {
+            if (idx < deckSize) {
+                deck[idx++] = val;
+            }
+        }
     }
 
-    // Non-permanents
-    for (let i = 0; i < cmcCounts.nonperm; i++) {
-        deck[idx++] = 1;
+    // IMPORTANT: If deckSize > total counts, fill remainder with 255 (Miss)
+    // This prevents "phantom lands" (0s) from appearing if counts are incomplete
+    while (idx < deckSize) {
+        deck[idx++] = 255;
     }
 
     let totalPermanentsPlayed = 0;
@@ -61,10 +78,11 @@ export function simulateGenesisWave(deckSize, cmcCounts, x) {
         // Partial Fisher-Yates
         partialShuffle(deck, drawCount, deckSize);
 
-        // Count permanents
+        // Count permanents with CMC <= X
         let count = 0;
         for (let i = 0; i < drawCount; i++) {
-            if (deck[i] === 0) {
+            const cmc = deck[i];
+            if (cmc !== 255 && cmc <= x) {
                 count++;
             }
         }
@@ -83,30 +101,85 @@ export function simulateGenesisWave(deckSize, cmcCounts, x) {
 /**
  * Get current deck configuration from shared config
  * @returns {Object} - Deck configuration
- *
- * Note: Wave uses card type counts from shared config to estimate CMC distribution
- * For now, we'll use the shared type-based config and convert to CMC buckets
  */
 export function getDeckConfig() {
     const config = DeckConfig.getDeckConfig();
+    const cardData = DeckConfig.getImportedCardData();
 
-    // For Wave, we'll use a simple mapping from card types to CMC buckets
-    // This is a rough estimate - in reality users should configure CMC separately
-    const cmcCounts = {
-        cmc0: config.lands, // Lands are CMC 0
-        cmc2: config.creatures, // Estimate creatures at CMC 2-4
-        cmc3: config.instants + config.sorceries, // Spells at CMC 3
-        cmc4: config.artifacts + config.enchantments, // Artifacts/enchantments at CMC 4
-        cmc5: config.planeswalkers, // Planeswalkers at CMC 5+
-        cmc6: config.battles, // Battles at CMC 6+
-        lands: config.lands,
-        nonperm: config.instants + config.sorceries
-    };
+    // Use shared getDeckSize function to properly handle dual-typed cards
+    const deckSize = DeckConfig.getDeckSize(true);
 
-    const deckSize = Object.values(cmcCounts).reduce((sum, count) => sum + count, 0);
+    // Distribution map: CMC (number) -> count, plus 'nonperm' -> count
+    let distribution = {};
+    
+    // Also keep simple counts for stats display if needed (derived from distribution later if necessary)
+    // But for simulation, we use 'distribution'
 
-    // Clear cache if deck changed (use hash instead of JSON.stringify for performance)
-    const newHash = hashCMC(cmcCounts);
+    if (cardData && cardData.cardsByName && Object.keys(cardData.cardsByName).length > 0) {
+        // Use actual CMC data from imported cards
+        Object.values(cardData.cardsByName).forEach(card => {
+            const typeLine = card.type_line.toLowerCase();
+            
+            // Check if it's a permanent
+            // Logic: It IS a permanent if it has permanent types.
+            // It is only 'nonperm' if it is purely Instant/Sorcery (and not an Adventure/Artifact/etc)
+            // However, Scryfall data and my 'isNonPermanent' logic in import might be specific.
+            // Let's use the same logic as the sampler:
+            const isNonPermanent = typeLine.includes('instant') || typeLine.includes('sorcery');
+            // Wait, "Creature // Instant" (Adventure) has 'instant' in type_line.
+            // We need to be careful.
+            
+            // Better logic: Check if it has a permanent type
+            const isPermanent = typeLine.includes('creature') || 
+                                typeLine.includes('artifact') || 
+                                typeLine.includes('enchantment') || 
+                                typeLine.includes('planeswalker') || 
+                                typeLine.includes('battle') || 
+                                typeLine.includes('land');
+
+            if (!isPermanent) {
+                distribution.nonperm = (distribution.nonperm || 0) + card.count;
+            } else {
+                // It is a permanent (Land, Creature, etc.)
+                const cmc = card.cmc !== undefined ? Math.floor(card.cmc) : 0;
+                distribution[cmc] = (distribution[cmc] || 0) + card.count;
+            }
+        });
+        
+        console.log('Genesis Wave Distribution (Imported):', distribution);
+
+    } else {
+        // Fallback to type-based estimates from manual config
+        // Map the UI buckets to specific CMCs
+        distribution = {
+            0: config.lands + config.cmc0, // Lands are CMC 0, plus explicitly CMC 0 non-lands
+            2: config.creatures, // Approximating creatures as CMC 2 (from old logic) - or config.cmc2?
+            // Actually, manual config has specific CMC fields if the user used them.
+            // Let's use the manual CMC buckets if they are non-zero, otherwise fallback to types
+            
+            // Note: The UI has inputs for 'cmc0'...'cmc6'.
+            // It also has inputs for 'lands', 'creatures', etc.
+            // Usually users use one or the other.
+            // Let's prioritize the CMC buckets for permanents.
+        };
+
+        // Reset and rebuild based on manual config logic
+        distribution = {
+            0: config.lands + config.cmc0,
+            2: config.cmc2,
+            3: config.cmc3,
+            4: config.cmc4,
+            5: config.cmc5,
+            6: config.cmc6, // Treats all 6+ as 6. Limitation of manual mode.
+            nonperm: config.instants + config.sorceries // Or config.nonperm? No, calculated from types.
+        };
+        
+        // If CMC buckets are all empty but types are not, maybe fall back to types? 
+        // But the default values for CMC buckets are set in deckConfig.js.
+    }
+
+    // Clear cache if deck changed
+    const newHash = hashDistribution(distribution);
     if (newHash !== lastDeckHash) {
         simulationCache.clear();
         lastDeckHash = newHash;
@@ -117,10 +190,27 @@ export function getDeckConfig() {
         xSlider.max = Math.min(deckSize, 30);
     }
 
+    // Calculate total permanents for stats
+    let totalPerms = 0;
+    for (const [k, v] of Object.entries(distribution)) {
+        if (k !== 'nonperm') totalPerms += v;
+    }
+    
+    // Construct a compatible cmcCounts object for the view (stats panel)
+    // This is just for display/logic in updateStats, not for simulation
+    const cmcCounts = {
+        lands: distribution[0] || 0, // Approx
+        nonperm: distribution.nonperm || 0,
+        // The rest aren't really needed for the stats panel logic shown previously
+    };
+
     return {
         deckSize,
         x: parseInt(document.getElementById('wave-xValue').value) || 10,
-        cmcCounts
+        distribution,
+        cmcCounts, // For backward compatibility with updateStats
+        totalPerms,
+        cardData
     };
 }
 
@@ -140,7 +230,8 @@ export function calculate() {
     const maxX = Math.min(config.x + CONFIG.X_RANGE_AFTER, config.deckSize);
 
     for (let testX = minX; testX <= maxX; testX++) {
-        const sim = simulateGenesisWave(config.deckSize, config.cmcCounts, testX);
+        // Pass distribution instead of cmcCounts
+        const sim = simulateGenesisWave(config.deckSize, config.distribution, testX);
 
         results[testX] = {
             expectedPermanents: sim.expectedPermanents,
@@ -301,10 +392,8 @@ function updateStats(config, results) {
 
     if (statsPanel && currentResult) {
         const efficiency = (currentResult.expectedPermanents / currentResult.cardsRevealed) * 100;
-        const totalPerms = config.cmcCounts.lands + config.cmcCounts.cmc0 +
-                          config.cmcCounts.cmc2 + config.cmcCounts.cmc3 +
-                          config.cmcCounts.cmc4 + config.cmcCounts.cmc5 +
-                          config.cmcCounts.cmc6;
+        // Calculate total permanents (non-permanents are instants + sorceries)
+        const totalPerms = config.deckSize - config.cmcCounts.nonperm;
         const permPercent = (totalPerms / config.deckSize) * 100;
 
         // Create interpretation message
@@ -367,10 +456,14 @@ function updateComparison(config, results) {
     if (config.x >= 7) {
         // Import surge simulator to compare
         import('./surge.js').then(surgeModule => {
-            const totalPermanents = config.cmcCounts.lands + config.cmcCounts.cmc0 +
-                                   config.cmcCounts.cmc2 + config.cmcCounts.cmc3 +
-                                   config.cmcCounts.cmc4 + config.cmcCounts.cmc5 +
-                                   config.cmcCounts.cmc6;
+            // Use pre-calculated totalPerms if available, otherwise sum buckets (legacy fallback)
+            const totalPermanents = config.totalPerms !== undefined 
+                ? config.totalPerms 
+                : (config.cmcCounts.lands + config.cmcCounts.cmc0 +
+                   config.cmcCounts.cmc2 + config.cmcCounts.cmc3 +
+                   config.cmcCounts.cmc4 + config.cmcCounts.cmc5 +
+                   config.cmcCounts.cmc6);
+                   
             const nonPermanents = config.cmcCounts.nonperm;
 
             const surgeResult = surgeModule.simulatePrimalSurge(config.deckSize, nonPermanents, totalPermanents);
@@ -406,6 +499,138 @@ function updateComparison(config, results) {
 }
 
 /**
+ * Run sample Genesis Wave simulations and display them
+ */
+export function runSampleReveals() {
+    const config = getDeckConfig();
+    const cardData = config.cardData;
+
+    if (!cardData || !cardData.cardsByName || Object.keys(cardData.cardsByName).length === 0) {
+        document.getElementById('wave-reveals-display').innerHTML = '<p style="color: var(--text-dim);">Import a decklist to see sample reveals</p>';
+        return;
+    }
+
+    // Get number of simulations from input (no cap)
+    const countInput = document.getElementById('wave-sample-count');
+    const numSims = Math.max(1, parseInt(countInput?.value) || 10);
+
+    // Build deck array with full card objects
+    const deck = buildDeckFromCardData(cardData);
+
+    // Run simulations
+    let revealsHTML = '';
+    let totalPermanents = 0;
+    const permanentDistribution = new Array(config.x + 1).fill(0);
+
+    for (let i = 0; i < numSims; i++) {
+        // Shuffle deck
+        const shuffled = shuffleDeck([...deck]);
+
+        // Reveal X cards
+        const revealed = shuffled.slice(0, config.x);
+
+        // Count permanents (Genesis Wave: all permanents with CMC <= X go to battlefield)
+        const permanentsToBattlefield = [];
+        const permanentsToGraveyard = [];
+        const nonPermanents = [];
+
+        revealed.forEach(card => {
+            // A card is a permanent if it has any permanent type, regardless of other types (e.g. Adventures are permanents)
+            const hasPermanentType = card.types.some(t => 
+                ['creature', 'artifact', 'enchantment', 'planeswalker', 'battle', 'land'].includes(t)
+            );
+            
+            if (!hasPermanentType) {
+                nonPermanents.push(card);
+            } else {
+                // Check if CMC <= X (Genesis Wave only puts permanents with CMC <= X onto battlefield)
+                const cmc = card.cmc !== undefined ? card.cmc : 0;
+                if (cmc <= config.x) {
+                    permanentsToBattlefield.push(card);
+                } else {
+                    permanentsToGraveyard.push(card);
+                }
+            }
+        });
+
+        const permanentCount = permanentsToBattlefield.length;
+        totalPermanents += permanentCount;
+        permanentDistribution[permanentCount]++;
+
+        // Build HTML for this reveal
+        revealsHTML += `<div class="sample-reveal ${permanentCount > 0 ? 'free-spell' : 'whiff'}">`;
+        revealsHTML += `<div><strong>Reveal ${i + 1} (X=${config.x}):</strong></div>`;
+        revealsHTML += '<div style="margin: 8px 0;">';
+
+        revealed.forEach(card => {
+            const hasPermanentType = card.types.some(t => 
+                ['creature', 'artifact', 'enchantment', 'planeswalker', 'battle', 'land'].includes(t)
+            );
+            const cmc = card.cmc !== undefined ? card.cmc : 0;
+            const toBattlefield = hasPermanentType && cmc <= config.x;
+
+            // Color coding:
+            // Green background = permanent with CMC <= X (goes to battlefield)
+            // Red background = permanent with CMC > X (goes to graveyard)
+            // Blue background = non-permanent (goes to graveyard)
+            let bgColor = '';
+            let textColor = '#fff';
+            if (!hasPermanentType) {
+                bgColor = '#3b82f6'; // Blue for non-permanents
+            } else if (cmc <= config.x) {
+                bgColor = '#22c55e'; // Green for playable permanents
+                textColor = '#000';
+            } else {
+                bgColor = '#dc2626'; // Red for high-CMC permanents
+            }
+
+            revealsHTML += `<span class="reveal-card" style="background: ${bgColor}; color: ${textColor};" title="${card.type_line} - CMC: ${cmc}">${card.name}</span>`;
+        });
+
+        revealsHTML += '</div>';
+        revealsHTML += `<div class="reveal-summary">`;
+        revealsHTML += `<strong>Result:</strong> ${permanentCount} permanent${permanentCount !== 1 ? 's' : ''} to battlefield`;
+
+        const toGraveyard = nonPermanents.length + permanentsToGraveyard.length;
+        if (toGraveyard > 0) {
+            revealsHTML += `, ${toGraveyard} to graveyard`;
+            if (permanentsToGraveyard.length > 0) {
+                revealsHTML += ` (${permanentsToGraveyard.length} high-CMC permanent${permanentsToGraveyard.length !== 1 ? 's' : ''})`;
+            }
+        }
+
+        revealsHTML += '</div></div>';
+    }
+
+    // Calculate average permanents
+    const avgPermanents = (totalPermanents / numSims).toFixed(2);
+    const avgPercent = ((avgPermanents / config.x) * 100).toFixed(1);
+
+    // Build distribution chart
+    let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
+    distributionHTML += '<h4 style="margin-top: 0;">Permanent Distribution:</h4>';
+    distributionHTML += renderDistributionChart(
+        permanentDistribution,
+        numSims,
+        (count) => `${count.toString().padStart(2)} permanents`,
+        (idx) => (idx === config.x && permanentDistribution[idx] > 0) ? ' ← 100% HITS' : ''
+    );
+
+    distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
+    distributionHTML += `<strong>Average permanents:</strong> ${avgPermanents} out of ${config.x} revealed (${avgPercent}%)`;
+    distributionHTML += '</div></div>';
+
+    // Make reveals collapsible
+    const revealsSectionHTML = createCollapsibleSection(
+        `Show/Hide Individual Reveals (${numSims} simulations)`,
+        revealsHTML,
+        true
+    );
+
+    document.getElementById('wave-reveals-display').innerHTML = distributionHTML + revealsSectionHTML;
+}
+
+/**
  * Update all UI elements
  */
 export function updateUI() {
@@ -421,6 +646,11 @@ export function updateUI() {
     updateStats(config, results);
     updateTable(config, results);
     updateComparison(config, results);
+
+    // Draw initial sample reveals if we have card data
+    if (config.cardData && config.cardData.cardsByName && Object.keys(config.cardData.cardsByName).length > 0) {
+        runSampleReveals();
+    }
 }
 
 /**

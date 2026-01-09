@@ -5,6 +5,10 @@
 
 import { formatNumber, formatPercentage, createCache, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
+import {
+    buildDeckFromCardData, shuffleDeck, renderCardBadge, renderDistributionChart,
+    createCollapsibleSection, extractCardTypes
+} from '../utils/sampleSimulator.js';
 
 const CONFIG = {
     ITERATIONS: 15000
@@ -73,11 +77,14 @@ export function simulatePrimalSurge(deckSize, nonPermanents, permanents) {
  */
 export function getDeckConfig() {
     const config = DeckConfig.getDeckConfig();
+    const cardData = DeckConfig.getImportedCardData();
 
+    // Use shared getDeckSize function to properly handle dual-typed cards
+    const deckSize = DeckConfig.getDeckSize(true);  // Include non-permanents
+
+    // For simulation purposes, count instants and sorceries as non-permanents
     const nonPermanents = config.instants + config.sorceries;
-    const permanents = config.creatures + config.artifacts + config.enchantments +
-                      config.planeswalkers + config.lands + config.battles;
-    const deckSize = nonPermanents + permanents;
+    const permanents = deckSize - nonPermanents;
 
     // Clear cache if deck changed
     const newHash = `${deckSize}-${nonPermanents}-${permanents}`;
@@ -86,7 +93,7 @@ export function getDeckConfig() {
         lastDeckHash = newHash;
     }
 
-    return { deckSize, nonPermanents, permanents };
+    return { deckSize, nonPermanents, permanents, cardData };
 }
 
 /**
@@ -303,6 +310,104 @@ function updateComparison(config, result) {
 }
 
 /**
+ * Run sample Primal Surge simulations and display them
+ */
+export function runSampleReveals() {
+    const config = getDeckConfig();
+    const cardData = config.cardData;
+
+    if (!cardData || !cardData.cardsByName || Object.keys(cardData.cardsByName).length === 0) {
+        document.getElementById('surge-reveals-display').innerHTML = '<p style="color: var(--text-dim);">Import a decklist to see sample reveals</p>';
+        return;
+    }
+
+    // Get number of simulations from input (no cap)
+    const countInput = document.getElementById('surge-sample-count');
+    const numSims = Math.max(1, parseInt(countInput?.value) || 10);
+
+    // Build deck array with full card objects
+    const deck = buildDeckFromCardData(cardData);
+
+    // Run simulations
+    let revealsHTML = '';
+    let totalPermanents = 0;
+    const permanentDistribution = new Array(deck.length + 1).fill(0);
+
+    for (let i = 0; i < numSims; i++) {
+        // Shuffle deck
+        const shuffled = shuffleDeck([...deck]);
+
+        // Simulate Primal Surge - count permanents until hit non-permanent
+        const revealedCards = [];
+        let permanentCount = 0;
+
+        for (let j = 0; j < shuffled.length; j++) {
+            const card = shuffled[j];
+            const isNonPermanent = card.types.includes('instant') || card.types.includes('sorcery');
+
+            revealedCards.push({...card, isNonPermanent});
+
+            if (isNonPermanent) {
+                break; // Stop at first non-permanent
+            }
+            permanentCount++;
+        }
+
+        totalPermanents += permanentCount;
+        permanentDistribution[permanentCount]++;
+
+        // Build HTML for this reveal
+        const hitNonPermanent = revealedCards[revealedCards.length - 1]?.isNonPermanent;
+        revealsHTML += `<div class="sample-reveal ${!hitNonPermanent ? 'free-spell' : 'whiff'}">`;
+        revealsHTML += `<div><strong>Reveal ${i + 1}:</strong></div>`;
+        revealsHTML += '<div style="margin: 8px 0;">';
+
+        revealedCards.forEach(card => {
+            const primaryType = card.types[0] || 'land';
+            revealsHTML += renderCardBadge(card, primaryType);
+        });
+
+        revealsHTML += '</div>';
+        revealsHTML += `<div class="reveal-summary ${!hitNonPermanent ? 'free-spell' : 'whiff'}">`;
+
+        if (hitNonPermanent) {
+            revealsHTML += `<strong>⛔ Stopped!</strong> - ${permanentCount} permanent${permanentCount !== 1 ? 's' : ''} played`;
+        } else {
+            revealsHTML += `<strong>✓ Full Deck!</strong> - All ${permanentCount} permanents played`;
+        }
+
+        revealsHTML += '</div></div>';
+    }
+
+    // Calculate average permanents
+    const avgPermanents = (totalPermanents / numSims).toFixed(2);
+    const avgPercent = ((totalPermanents / numSims / deck.length) * 100).toFixed(1);
+
+    // Build distribution chart
+    let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
+    distributionHTML += '<h4 style="margin-top: 0;">Permanent Distribution:</h4>';
+    distributionHTML += renderDistributionChart(
+        permanentDistribution,
+        numSims,
+        (count) => `${count.toString().padStart(2)} permanents`,
+        (count) => count === deck.length ? ' ← FULL DECK' : ''
+    );
+
+    distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
+    distributionHTML += `<strong>Average permanents played:</strong> ${avgPermanents} (${avgPercent}% of deck)`;
+    distributionHTML += '</div></div>';
+
+    // Make reveals collapsible
+    const revealsSectionHTML = createCollapsibleSection(
+        `Show/Hide Individual Reveals (${numSims} simulations)`,
+        revealsHTML,
+        true
+    );
+
+    document.getElementById('surge-reveals-display').innerHTML = distributionHTML + revealsSectionHTML;
+}
+
+/**
  * Update all UI elements
  */
 export function updateUI() {
@@ -317,6 +422,11 @@ export function updateUI() {
     updateChart(config, result);
     updateTable(config, result);
     updateComparison(config, result);
+
+    // Draw initial sample reveals if we have card data
+    if (config.cardData && config.cardData.cardsByName && Object.keys(config.cardData.cardsByName).length > 0) {
+        runSampleReveals();
+    }
 }
 
 /**

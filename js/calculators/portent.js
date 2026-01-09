@@ -5,6 +5,7 @@
 
 import { createCache, partialShuffle, formatNumber, formatPercentage, getChartAnimationConfig } from '../utils/simulation.js';
 import * as DeckConfig from '../utils/deckConfig.js';
+import { renderDistributionChart } from '../utils/sampleSimulator.js';
 
 const CONFIG = {
     ITERATIONS: 25000,
@@ -530,19 +531,14 @@ export function runSampleReveals() {
     // Build type distribution chart
     let distributionHTML = '<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--panel-bg-alt); border-radius: var(--radius-md);">';
     distributionHTML += '<h4 style="margin-top: 0;">Type Distribution:</h4>';
-    distributionHTML += '<pre style="font-family: monospace; font-size: 0.9em; margin: 0;">';
+    
+    distributionHTML += renderDistributionChart(
+        typeDistribution,
+        numSims,
+        (count) => `${count} ${count === 1 ? 'type ' : 'types'}`,
+        (count) => (count >= CONFIG.FREE_SPELL_THRESHOLD && typeDistribution[count] > 0) ? ' ← FREE SPELL' : ''
+    );
 
-    for (let numTypes = 0; numTypes <= 8; numTypes++) {
-        const count = typeDistribution[numTypes];
-        const pct = (count / numSims * 100).toFixed(2);
-        const barLength = Math.round(pct / 2);
-        const bar = '█'.repeat(barLength);
-        const marker = numTypes >= CONFIG.FREE_SPELL_THRESHOLD ? ' ← FREE SPELL' : '';
-        const typeLabel = numTypes === 1 ? 'type ' : 'types';
-        distributionHTML += `${numTypes} ${typeLabel}: ${pct.padStart(6)}% ${bar}${marker}\n`;
-    }
-
-    distributionHTML += '</pre>';
     distributionHTML += `<div style="margin-top: var(--spacing-md); text-align: center;">`;
     distributionHTML += `<strong>Sample Result:</strong> ${freeSpellCount}/${numSims} reveals = ${((freeSpellCount / numSims) * 100).toFixed(1)}% chance of free spell<br>`;
     distributionHTML += `<strong>Average types exiled:</strong> ${avgTypesExiled}`;

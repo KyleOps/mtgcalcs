@@ -232,6 +232,20 @@
                         </table>
                     </div>
                 </section>
+
+                <section class="panel" id="surge-sample-reveals" aria-label="Sample reveals">
+                    <h2>🎴 Sample Primal Surge Reveals</h2>
+                    <div style="display: flex; gap: var(--spacing-md); align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                        <label for="surge-sample-count" style="color: var(--text-secondary);">Simulations:</label>
+                        <input type="number" id="surge-sample-count" min="1" max="10000" value="10"
+                               style="width: 100px; padding: 8px; background: var(--panel-bg-alt); border: 1px solid var(--accent); border-radius: var(--radius-md); color: var(--text-light); text-align: center;">
+                        <button id="surge-draw-reveals-btn" class="import-btn">Run Simulations</button>
+                        <span style="color: var(--text-dim); font-size: 0.85em;">(1-10000)</span>
+                    </div>
+                    <div id="surge-reveals-display">
+                        <!-- Sample reveals will be displayed here -->
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -272,6 +286,20 @@
                     <div class="table-wrapper">
                         <table class="comparison-table" id="wave-comparisonTable">
                         </table>
+                    </div>
+                </section>
+
+                <section class="panel" id="wave-sample-reveals" aria-label="Sample reveals">
+                    <h2>🎴 Sample Genesis Wave Reveals</h2>
+                    <div style="display: flex; gap: var(--spacing-md); align-items: center; margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                        <label for="wave-sample-count" style="color: var(--text-secondary);">Simulations:</label>
+                        <input type="number" id="wave-sample-count" min="1" max="10000" value="10"
+                               style="width: 100px; padding: 8px; background: var(--panel-bg-alt); border: 1px solid var(--accent); border-radius: var(--radius-md); color: var(--text-light); text-align: center;">
+                        <button id="wave-draw-reveals-btn" class="import-btn">Run Simulations</button>
+                        <span style="color: var(--text-dim); font-size: 0.85em;">(1-10000)</span>
+                    </div>
+                    <div id="wave-reveals-display">
+                        <!-- Sample reveals will be displayed here -->
                     </div>
                 </section>
             </div>
