@@ -576,7 +576,7 @@ export async function importDecklistBatch(decklistText, progressCallback = null)
 
 // TODO: Deploy the Cloudflare Worker in the /serverless folder and add its URL here.
 // Example: 'https://mtgcalcs-proxy.yourname.workers.dev'
-const CUSTOM_PROXY_URL = '';
+const CUSTOM_PROXY_URL = 'https://hidden-river-b602.kylepettigrew.workers.dev';
 
 const CORS_PROXIES = [
     'https://corsproxy.io/?',
